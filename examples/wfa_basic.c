@@ -60,6 +60,8 @@ int main(int argc, char* argv[]) {
   wavefront_aligner_t* const wf_aligner = wavefront_aligner_new(&attributes);
   // Align
   wavefront_align(wf_aligner,pattern,strlen(pattern),text,strlen(text));
+
+    /*
   fprintf(stderr,"WFA-Alignment returns score %d\n",wf_aligner->cigar->score);
   // Display alignment
   fprintf(stderr,"  PATTERN  %s\n",pattern);
@@ -68,6 +70,7 @@ int main(int argc, char* argv[]) {
       cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
   cigar_print_pretty(stderr,wf_aligner->cigar,
       pattern,strlen(pattern),text,strlen(text));
+    */
     
     // wavefront_plot_print(stderr, wf_aligner);
   // Free

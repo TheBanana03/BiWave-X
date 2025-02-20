@@ -31,7 +31,12 @@
 
 #include "utils/commons.h"
 #include "wavefront_backtrace.h"
+#if __AVX2__ &&  __BYTE_ORDER == __LITTLE_ENDIAN
 
+  #if __AVX512CD__ && __AVX512VL__
+  extern void avx_backtrace_matches_iter(uint64_t* operations);
+  #endif
+#endif
 /*
  * Wavefront type
  */
@@ -82,13 +87,20 @@ void wavefront_backtrace_matches(
     int num_matches,
     cigar_t* const cigar) {
   // Parameters
-  const uint64_t matches_lut = 0x4D4D4D4D4D4D4D4Dul; // Matches LUT = "MMMMMMMM"
+  const uint64_t matches_lut = 0x4D4D4D4D4D4D4D4Dul; // Matches LUT = "MMMMMMMM" LUT->lookup table
   char* operations = cigar->operations + cigar->begin_offset;
   // Update offset first
   cigar->begin_offset -= num_matches;
+  //Blocks of 64-matches 
+  while (num_matches >= 64) {
+    //initial version
+    operations -= 64;
+    avx_backtrace_matches_iter((uint64_t*)(operations+1));
+    num_matches -= 64;
+  }
   // Blocks of 8-matches
   while (num_matches >= 8) {
-    operations -= 8;
+    operations -= 8; //technically a continous offset so I would just need to do -64 for mine
     *((uint64_t*)(operations+1)) = matches_lut;
     num_matches -= 8;
   }
@@ -333,6 +345,7 @@ void wavefront_backtrace_affine(
   // Prepare cigar
   cigar_t* const cigar = wf_aligner->cigar;
   cigar_clear(cigar);
+
   cigar->end_offset = cigar->max_operations - 1;
   cigar->begin_offset = cigar->max_operations - 2;
   cigar->operations[cigar->end_offset] = '\0';
@@ -501,7 +514,7 @@ void wavefront_backtrace_affine(
     // Update coordinates
     v = WAVEFRONT_V(k,offset);
     h = WAVEFRONT_H(k,offset);
-  }
+  } //end of while loop
   // Account for last operations
   if (matrix_type == affine2p_matrix_M) {
     if (v > 0 && h > 0) {

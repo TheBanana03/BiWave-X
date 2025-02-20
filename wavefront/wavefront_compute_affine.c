@@ -110,15 +110,6 @@ void wavefront_compute_affine_idm(
     wf_offset_t max = MAX(del1,MAX(misms,ins1));
     //m512i checking
     __m512i offset;
-    /*
-      offset = _mm512_loadu_si512((__m512*)&ins1);
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&del1);
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&misms);
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&max);
-      print_m512i(offset);*/
 
     // Adjust offset out of boundaries !(h>tlen,v>plen) (here to allow vectorization)
     const wf_unsigned_offset_t h = WAVEFRONT_H(k,max); // Make unsigned to avoid checking negative
@@ -130,7 +121,7 @@ void wavefront_compute_affine_idm(
     print_m512i(offset);
     out_m[k] = max;
   }
-
+  
   //AVX512 NEXT-kernel loop
   if(num_of_diagonals < elems_per_reg) return;
 
@@ -143,10 +134,6 @@ void wavefront_compute_affine_idm(
 
   for (k=k_min; k <= k_max; k+=elems_per_reg) {
 
-      //const wf_offset_t ins1;
-      //pass an mem_address you dumdum
-      //const int* patLen = pattern_length;
-      //const int* textLen = text_length;
       __m512i ins1_o = _mm512_loadu_si512((__m512i*)&m_open1[k-1]); //self note: wf_offset_t is equivalent to signed int32
       __m512i ins1_e = _mm512_loadu_si512((__m512i*)&i1_ext[k-1]);
 
@@ -156,74 +143,20 @@ void wavefront_compute_affine_idm(
 
       __m512i misms = _mm512_loadu_si512((__m512i*)&m_misms[k]); //+1 operation to all operands will occur inside the assembly
 
-      __m512i max; //gonna receive a vector at this point
+      __m512i max;
 
       //checker
       //Offsets before iterations
       __m512i offset;
-      offset = _mm512_loadu_si512((__m512*)&ins1_o);
-      printf("ins1_o");
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&ins1_e);
-      printf("ins1_e");
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&del1_o);
-      printf("del1_o");
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&del1_e);
-      printf("del1_e");
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&misms);
-      printf("misms");
-      print_m512i(offset);
-
-      //out_i1[k];
-      //out_d1[k];
-      //out_m[k];
       //int length of pattern and text may cause errors
 
       avx512_wavefront_next_iter1(&ins1_o, &ins1_e, (__m512i*)&out_i1[k], &del1_o, &del1_e, (__m512i*)&out_d1[k]);
-      //
-      printf("Offsets after Outputted Iter1 \n");
-      offset = _mm512_loadu_si512((__m512*)&out_i1[k]);
-      print_m512i(offset);
-      offset = _mm512_loadu_si512((__m512*)&out_d1[k]);
-      print_m512i(offset);
 
       avx512_wavefront_next_iter2(&misms, (__m512i*)&out_i1[k], (__m512i*)&out_d1[k], &max);
-      //
-      printf("Offsets after Outputted Iter2: \n");
-      offset = _mm512_loadu_si512((__m512*)&misms); //consistent as of 09/02/2025
-      print_m512i(offset);
-      
-      offset = _mm512_loadu_si512((__m512*)&out_i1[k]); //consistent as of 09/02/2025
-      print_m512i(offset);
-      
-      offset = _mm512_loadu_si512((__m512*)&out_d1[k]);
-      print_m512i(offset);
-
-      offset = _mm512_loadu_si512((__m512*)&max);
-      print_m512i(offset);
-      
       //pattern checks
       avx512_wavefront_next_iter3(&max, (__m512i*)&out_m[k], &ks, &text_length, &pattern_length);
-      printf("Offsets after Outputted Iter3: \n");
-      /*
-      offset = _mm512_loadu_si512((__m512*)&misms); //consistent as of 09/02/2025
-      print_m512i(offset);
       
-      offset = _mm512_loadu_si512((__m512*)&out_i1[k]); //consistent as of 09/02/2025
-      print_m512i(offset);
-      
-      offset = _mm512_loadu_si512((__m512*)&out_d1[k]);
-      print_m512i(offset);
-      */
-      printf("Final out_m[k] vector: \n");
-      offset = _mm512_loadu_si512((__m512*)&out_m[k]);
-      print_m512i(offset);
   }
-
-
 }
 /*
  * Compute Kernel (Piggyback)

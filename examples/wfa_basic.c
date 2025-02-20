@@ -56,21 +56,26 @@ int main(int argc, char* argv[]) {
     attributes.plot.enabled = 1;
     attributes.plot.resolution_points = 2000;
     attributes.plot.align_level = 0;
+
+    wavefront_heuristic_set_none(&attributes.heuristic);
+    
   // Initialize Wavefront Aligner
   wavefront_aligner_t* const wf_aligner = wavefront_aligner_new(&attributes);
   // Align
   wavefront_align(wf_aligner,pattern,strlen(pattern),text,strlen(text));
 
-    /*
-  fprintf(stderr,"WFA-Alignment returns score %d\n",wf_aligner->cigar->score);
+    
+  // fprintf(stderr,"WFA-Alignment returns score %d\n",wf_aligner->cigar->score);
+
   // Display alignment
-  fprintf(stderr,"  PATTERN  %s\n",pattern);
-  fprintf(stderr,"  TEXT     %s\n",text);
-  fprintf(stderr,"  SCORE (RE)COMPUTED %d\n",
-      cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
-  cigar_print_pretty(stderr,wf_aligner->cigar,
-      pattern,strlen(pattern),text,strlen(text));
-    */
+  // fprintf(stderr,"  PATTERN  %s\n",pattern);
+  // fprintf(stderr,"  TEXT     %s\n",text);
+  // fprintf(stderr,"  SCORE (RE)COMPUTED %d\n",
+  //     cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
+  // cigar_print_pretty(stderr,wf_aligner->cigar,
+  //     pattern,strlen(pattern),text,strlen(text));
+    
+    
     
     // wavefront_plot_print(stderr, wf_aligner);
   // Free

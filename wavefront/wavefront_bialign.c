@@ -28,7 +28,7 @@
  * AUTHOR(S): Santiago Marco-Sola <santiagomsola@gmail.com>
  */
 
-#include "utils/commons.h"
+#include "/home/yuzu_/WFA2-lib/utils/commons.h"
 #include "wavefront_bialign.h"
 #include "wavefront_unialign.h"
 #include "wavefront_bialigner.h"
@@ -48,6 +48,12 @@
 #define WF_BIALIGN_FALLBACK_MIN_SCORE  250
 #define WF_BIALIGN_FALLBACK_MIN_LENGTH 100
 #define WF_BIALIGN_RECOVERY_MIN_SCORE  500
+
+#if #if __AVX512CD__ && __AVX512VL__
+#include <immintrin.h>
+
+extern uint16_t avx_wavefront_overlap_breakpoint_m2m(__m512i k0_vec, __m512i tlen_vec, __m512i plen_vec, __m512i score0_vec, __m512i score1_vec, __m512i breakpoint_score_vec, const wf_offset_t* mwf_0_offsets, const wf_offset_t* mwf_1_offsets, int text_length, __m512i* moffset0_vec, __m512i* moffset1_vec, __m512i* k1_vec);
+#endif
 
 /*
  * Debug
@@ -183,7 +189,9 @@ int wavefront_bialign_base(
     return WF_STATUS_UNATTAINABLE;
   }
 }
-/*
+
+
+/* _____________________________________________________________________________________________________________________________________
  * Bidirectional check breakpoints
  */
 void wavefront_bialign_breakpoint_indel2indel(
@@ -212,6 +220,7 @@ void wavefront_bialign_breakpoint_indel2indel(
   const int min_hi = MIN(hi_0,hi_1);
   const int max_lo = MAX(lo_0,lo_1);
   int k_0;
+  
   for (k_0=max_lo;k_0<=min_hi;k_0++) {
     const int k_1 = WAVEFRONT_K_INVERSE(k_0,pattern_length,text_length);
     // Fetch offsets
@@ -308,6 +317,94 @@ void wavefront_bialign_breakpoint_m2m(
     }
   }
 }
+
+void wavefront_bialign_breakpoint_m2m_avx512(
+  wavefront_aligner_t* const wf_aligner,
+  const bool breakpoint_forward,
+  const int score_0,
+  const int score_1,
+  wavefront_t* const mwf_0,
+  wavefront_t* const mwf_1,
+  wf_bialign_breakpoint_t* const breakpoint) {
+
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int text_length = sequences->text_length;
+  const int pattern_length = sequences->pattern_length;
+
+  const int lo_0 = mwf_0->lo;
+  const int hi_0 = mwf_0->hi;
+  const int lo_1 = WAVEFRONT_K_INVERSE(mwf_1->hi, pattern_length, text_length);
+  const int hi_1 = WAVEFRONT_K_INVERSE(mwf_1->lo, pattern_length, text_length);
+
+  if (hi_1 < lo_0 || hi_0 < lo_1) return;
+
+  const int min_hi = MIN(hi_0, hi_1);
+  const int max_lo = MAX(lo_0, lo_1);
+
+  __m512i k0_vec = _mm512_set_epi32(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+  __m512i tlen_vec = _mm512_set1_epi32(text_length);
+  __m512i plen_vec = _mm512_set1_epi32(pattern_length);
+  __m512i score0_vec = _mm512_set1_epi32(score_0);
+  __m512i score1_vec = _mm512_set1_epi32(score_1);
+  __m512i breakpoint_score_vec = _mm512_set1_epi32(breakpoint->score);
+
+  for (int base_k0 = max_lo; base_k0 <= min_hi; base_k0 += 16) {
+      __m512i current_k0_vec = _mm512_add_epi32(k0_vec, _mm512_set1_epi32(base_k0));
+      __mmask16 k0_mask = _mm512_cmp_epi32_mask(current_k0_vec, _mm512_set1_epi32(min_hi + 1), _MM_CMPINT_LT);
+
+      if (k0_mask == 0) break; // All k0 values are out of range
+
+      __m512i moffset0_vec, moffset1_vec, k1_vec;
+      uint16_t combined_mask = wavefront_bialign_breakpoint_m2m_avx512_asm(
+          current_k0_vec,
+          tlen_vec,
+          plen_vec,
+          score0_vec,
+          score1_vec,
+          breakpoint_score_vec,
+          mwf_0->offsets,
+          mwf_1->offsets,
+          text_length,
+          &moffset0_vec,
+          &moffset1_vec,
+          &k1_vec);
+
+      if (combined_mask) {
+          for (int j = 0; j < 16; ++j) {
+              if ((combined_mask & (1 << j))) {
+                  int k0 = base_k0 + j;
+                  int k1 = text_length - pattern_length - k0;
+                  wf_offset_t moffset0 = mwf_0->offsets[k0];
+                  wf_offset_t moffset1 = mwf_1->offsets[k1];
+
+                  if (breakpoint_forward) {
+                      breakpoint->score_forward = score_0;
+                      breakpoint->score_reverse = score_1;
+                      breakpoint->k_forward = k0;
+                      breakpoint->k_reverse = k1;
+                      breakpoint->offset_forward = moffset0;
+                      breakpoint->offset_reverse = moffset1;
+                  } else {
+                      breakpoint->score_forward = score_1;
+                      breakpoint->score_reverse = score_0;
+                      breakpoint->k_forward = k1;
+                      breakpoint->k_reverse = k0;
+                      breakpoint->offset_forward = moffset1;
+                      breakpoint->offset_reverse = moffset0;
+                  }
+                  breakpoint->score = score_0 + score_1;
+                  breakpoint->component = affine2p_matrix_M;
+                  return; // Return immediately after first breakpoint is found
+              }
+          }
+      }
+
+      k0_vec = _mm512_add_epi32(k0_vec, _mm512_set1_epi32(16));
+  }
+}
+/* _____________________________________________________________________________________________________________________________________
+
+//=============================================================================================================
 /*
  * Bidirectional find overlaps
  */
@@ -344,6 +441,8 @@ void wavefront_bialign_overlap(
     const int score_i = score_1 - i;
     if (score_i < 0) break;
     const int score_mod_i = score_i % max_score_scope;
+
+    // skip this part `~~~~~~~~~~~~~~~~~~~~~~~
     // Check I2/D2-breakpoints (gap_affine_2p)
     if (distance_metric == gap_affine_2p) {
       if (score_0 + score_i - gap_opening2 >= breakpoint->score) continue;
@@ -362,6 +461,8 @@ void wavefront_bialign_overlap(
             i2wf_0,i2wf_1,affine2p_matrix_I2,breakpoint);
       }
     }
+    // skip ~~~~~~~~~~~~~~~
+
     // Check I1/D1-breakpoints (gap_affine)
     if (distance_metric >= gap_affine) {
       if (score_0 + score_i - gap_opening1 >= breakpoint->score) continue;
@@ -390,6 +491,92 @@ void wavefront_bialign_overlap(
     }
   }
 }
+
+#if __AVX512CD__ && __AVX512VL__
+FORCE_NO_INLINE void wavefront_bialign_overlap_avx512(
+    wavefront_aligner_t* const wf_aligner_0,
+    wavefront_aligner_t* const wf_aligner_1,
+    const int score_0,
+    const int score_1,
+    const bool breakpoint_forward,
+    wf_bialign_breakpoint_t* const breakpoint) {
+
+    const int max_score_scope = wf_aligner_0->wf_components.max_score_scope;
+    const distance_metric_t distance_metric = wf_aligner_0->penalties.distance_metric;
+    const int gap_opening1 = wf_aligner_0->penalties.gap_opening1;
+
+    const int score_mod_0 = score_0 % max_score_scope;
+    wavefront_t* const mwf_0 = wf_aligner_0->wf_components.mwavefronts[score_mod_0];
+    if (mwf_0 == NULL) return;
+    wavefront_t* d1wf_0 = NULL, *i1wf_0 = NULL;
+    if (distance_metric >= gap_affine) {
+        d1wf_0 = wf_aligner_0->wf_components.d1wavefronts[score_mod_0];
+        i1wf_0 = wf_aligner_0->wf_components.i1wavefronts[score_mod_0];
+    }
+
+    __m512i i_vec = _mm512_set_epi32(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+    __m512i score_1_vec = _mm512_set1_epi32(score_1);
+    __m512i score_0_vec = _mm512_set1_epi32(score_0);
+    __m512i gap_opening1_vec = _mm512_set1_epi32(gap_opening1);
+    __m512i breakpoint_score_vec = _mm512_set1_epi32(breakpoint->score);
+    __m512i max_score_scope_vec = _mm512_set1_epi32(max_score_scope - 1);
+
+    for (int base_i = 0; base_i < max_score_scope; base_i += 16) {
+        __m512i score_i_vec = _mm512_sub_epi32(score_1_vec, i_vec);
+        __mmask16 score_i_mask = _mm512_cmp_epi32_mask(score_i_vec, _mm512_set1_epi32(0), _MM_CMPINT_LT);
+
+        if (score_i_mask == 0xFFFF) break; // All score_i values are negative.
+
+        __m512i score_mod_i_vec = _mm512_and_epi32(score_i_vec, max_score_scope_vec);
+
+        __m512i d1wf_1_vec = _mm512_i32gather_epi32(score_mod_i_vec, wf_aligner_1->wf_components.d1wavefronts, 4);
+        __m512i i1wf_1_vec = _mm512_i32gather_epi32(score_mod_i_vec, wf_aligner_1->wf_components.i1wavefronts, 4);
+        __m512i mwf_1_vec = _mm512_i32gather_epi32(score_mod_i_vec, wf_aligner_1->wf_components.mwavefronts, 4);
+
+        __mmask16 d1_mask = _mm512_cmp_epi32_mask(d1wf_1_vec, _mm512_setzero_si512(), _MM_CMPINT_NE);
+        __mmask16 i1_mask = _mm512_cmp_epi32_mask(i1wf_1_vec, _mm512_setzero_si512(), _MM_CMPINT_NE);
+        __mmask16 m_mask = _mm512_cmp_epi32_mask(mwf_1_vec, _mm512_setzero_si512(), _MM_CMPINT_NE);
+
+        __m512i d1_check_vec = _mm512_sub_epi32(_mm512_add_epi32(score_0_vec, score_i_vec), gap_opening1_vec);
+        __mmask16 d1_breakpoint_mask = _mm512_cmp_epi32_mask(d1_check_vec, breakpoint_score_vec, _MM_CMPINT_LT);
+
+        __m512i m_check_vec = _mm512_add_epi32(score_0_vec, score_i_vec);
+        __mmask16 m_breakpoint_mask = _mm512_cmp_epi32_mask(m_check_vec, breakpoint_score_vec, _MM_CMPINT_LT);
+
+        if (d1_mask && d1_breakpoint_mask) {
+            for (int j = 0; j < 16; ++j) {
+                if ((d1_mask & d1_breakpoint_mask & (1 << j))) {
+                    wavefront_bialign_breakpoint_indel2indel(
+                        wf_aligner_0, breakpoint_forward, score_0, score_1 - (base_i + j),
+                        d1wf_0, (wavefront_t*)_mm512_extracti32x16_epi32(d1wf_1_vec, j), affine2p_matrix_D1, breakpoint);
+                }
+            }
+        }
+        if (i1_mask && d1_breakpoint_mask) {
+            for (int j = 0; j < 16; ++j) {
+                if ((i1_mask & d1_breakpoint_mask & (1 << j))) {
+                    wavefront_bialign_breakpoint_indel2indel(
+                        wf_aligner_0, breakpoint_forward, score_0, score_1 - (base_i + j),
+                        i1wf_0, (wavefront_t*)_mm512_extracti32x16_epi32(i1wf_1_vec, j), affine2p_matrix_I1, breakpoint);
+                }
+            }
+        }
+        if (m_mask && m_breakpoint_mask) {
+            for (int j = 0; j < 16; ++j) {
+                if ((m_mask & m_breakpoint_mask & (1 << j))) {
+                    wavefront_bialign_breakpoint_m2m(
+                        wf_aligner_0, breakpoint_forward, score_0, score_1 - (base_i + j),
+                        mwf_0, (wavefront_t*)_mm512_extracti32x16_epi32(mwf_1_vec, j), breakpoint);
+                }
+            }
+        }
+        i_vec = _mm512_add_epi32(i_vec, _mm512_set1_epi32(16));
+    }
+}
+#endif
+//=============================================================================================================
+
+
 /*
  * Bidirectional breakpoint detection
  */
@@ -408,6 +595,9 @@ int wavefront_bialign_overlap_gopen_adjust(
       return 0;
   }
 }
+
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 int wavefront_bialign_find_breakpoint(
     wavefront_bialigner_t* const bialigner,
     const distance_metric_t distance_metric,
@@ -517,6 +707,9 @@ int wavefront_bialign_find_breakpoint(
   // Return OK
   return WF_STATUS_OK;
 }
+
+
+
 int wavefront_bialign_find_breakpoint_exception(
     wavefront_aligner_t* const wf_aligner,
     alignment_form_t* const form,
@@ -578,6 +771,7 @@ void wavefront_bialign_init_half_1(
   half_form->text_begin_free = 0;
   half_form->text_end_free = global_form->text_end_free;
 }
+
 int wavefront_bialign_alignment(
     wavefront_aligner_t* const wf_aligner,
     alignment_form_t* const form,
@@ -728,3 +922,4 @@ void wavefront_bialign(
     wf_aligner->align_status.status = WF_STATUS_UNATTAINABLE;
   }
 }
+#endif

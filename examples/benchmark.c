@@ -37,7 +37,7 @@ int count_sequences(const char* filename) {
     return count;
 }
 
-char* get_random_pattern(const char* filename, int target_line) {
+char* extract_sequence(const char* filename, int target_line) {
     FILE* file = fopen(filename, "r");
     if (!file) {
         perror("Error opening file");
@@ -113,7 +113,7 @@ void execute_wfa_basic(char* pattern, char* text) {
         waitpid(pid, &status, 0);
         
         if (WIFEXITED(status)) {
-            printf("wfa_basic exited with status %d\n", WEXITSTATUS(status));
+            // printf("wfa_basic exited with status %d\n", WEXITSTATUS(status));
         } else {
             fprintf(stderr, "wfa_basic terminated abnormally\n");
         }
@@ -128,14 +128,14 @@ int main() {
 
     long long total_time;
     long long average_time;
+    long long total_time_per_len;
+    long long average_time_per_len;
     long long time_taken;
-    char* file_name = "./test_cases/Short150.txt";
 
-    int total_seq = count_sequences(file_name);
-    if (total_seq <= 0) {
-        fprintf(stderr, "No sequences found in file.\n");
-        return EXIT_FAILURE;
-    }
+    int num_len = 5;
+    const char* file_names[] = {"150", "300", "500", "750", "1000"};
+    const char* ref_file = "./test_cases/UNIPROT_DNA_ALL.fasta.txt";
+    char curr_file[50];
     
     srand(time(NULL));
 
@@ -144,51 +144,71 @@ int main() {
     // make[1]: Leaving directory '/home/jupyter-administrator/WFA2-lib/tools/align_benchmark'
     // make: *** [Makefile:90: tools/align_benchmark] Error 2
     if (system("bash build.sh") || 1) {
-        for (int i = 0; i < num_seq; i++) {
-            int pattern_length = 150;
-
-            int text_length = (rand()%10000)+1;
-            char* text = (char*)malloc(text_length+1);
-            if (!text) {
-                perror("Memory allocation failed.");
-                exit(EXIT_FAILURE);
+        for (int k = 0; k < num_len; k++) {
+            
+            snprintf(curr_file, sizeof(curr_file), "./test_cases/%s.txt", file_names[k]);
+            
+            int total_seq = count_sequences(curr_file);
+            if (total_seq <= 0) {
+                fprintf(stderr, "No sequences found in file.\n");
+                return EXIT_FAILURE;
             }
+
+            total_time_per_len = 0;
+            average_time_per_len = 0;
+
+            printf("Testing for text length %s\n", file_names[k]);
             
-            generate_dna(text, text_length);
-            
-            int target_line = rand() % total_seq;
-            char* pattern = get_random_pattern(file_name, target_line);
-            if (!pattern) {
-                fprintf(stderr, "Failed to get random pattern. Skipping...\n");
+            for (int i = 0; i < num_seq; i++) {
+                int pattern_length = 150;
+    
+                int text_length = (rand()%10000)+1;
+                // char* text = (char*)malloc(text_length+1);
+                // if (!text) {
+                //     perror("Memory allocation failed.");
+                //     exit(EXIT_FAILURE);
+                // }
+                
+                // generate_dna(text, text_length);
+                char* text = extract_sequence(ref_file, 0);
+                
+                int target_line = rand() % total_seq;
+                char* pattern = extract_sequence(curr_file, target_line);
+                if (!pattern) {
+                    fprintf(stderr, "Failed to get random pattern. Skipping...\n");
+                    free(text);
+                    continue;
+                }
+                
+                // print_sequences(pattern, text, target_line, text_length);
+                
+                total_time = 0;
+                average_time = 0;
+                time_taken = 0;
+                
+                for (int j = 0; j < num_iters; j++) {
+                    clock_gettime(CLOCK_MONOTONIC, &start);
+        
+                    execute_wfa_basic(pattern, text);
+        
+                    clock_gettime(CLOCK_MONOTONIC, &end);
+        
+                    // Compute elapsed time in nanoseconds
+                    time_taken = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                    total_time += time_taken;
+        
+                    // printf("Iteration %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken/1e9, time_taken);
+                }
+                
+                average_time = total_time/num_iters;
+                total_time_per_len += average_time;
+                // printf("Average execution time: %.6fs (%lldns)\n\n", average_time/1e9, average_time);
+    
+                free(pattern);
                 free(text);
-                continue;
             }
-            
-            print_sequences(pattern, text, target_line, text_length);
-            
-            total_time = 0;
-            average_time = 0;
-            time_taken = 0;
-            
-            for (int j = 0; j < num_iters; j++) {
-                clock_gettime(CLOCK_MONOTONIC, &start);
-    
-                execute_wfa_basic(pattern, text);
-    
-                clock_gettime(CLOCK_MONOTONIC, &end);
-    
-                // Compute elapsed time in nanoseconds
-                time_taken = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-                total_time += time_taken;
-    
-                printf("Iteration %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken/1e9, time_taken);
-            }
-            
-            average_time = total_time/num_iters;
-            printf("\nAverage execution time: %.6fs (%lldns)\n", average_time/1e9, average_time);
-
-            free(pattern);
-            free(text);
+            average_time_per_len += total_time_per_len/num_len;
+            printf("Average execution time: %.6fs (%lldns)\n\n", average_time_per_len/1e9, average_time_per_len);
         }
     }
     

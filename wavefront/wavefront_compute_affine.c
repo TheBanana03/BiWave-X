@@ -116,9 +116,9 @@ void wavefront_compute_affine_idm(
     const wf_unsigned_offset_t v = WAVEFRONT_V(k,max); // Make unsigned to avoid checking negative
     if (h > text_length) max = WAVEFRONT_OFFSET_NULL;
     if (v > pattern_length) max = WAVEFRONT_OFFSET_NULL;
-    printf("MAX FINAL VECTOR: \n");
+    // printf("MAX FINAL VECTOR: \n");
     offset = _mm512_loadu_si512((__m512*)&max);
-    print_m512i(offset);
+    // print_m512i(offset);
     out_m[k] = max;
   }
   

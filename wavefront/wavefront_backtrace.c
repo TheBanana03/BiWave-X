@@ -31,12 +31,12 @@
 
 #include "utils/commons.h"
 #include "wavefront_backtrace.h"
-#if __AVX2__ &&  __BYTE_ORDER == __LITTLE_ENDIAN
+// #if __AVX2__ &&  __BYTE_ORDER == __LITTLE_ENDIAN
 
-  #if __AVX512CD__ && __AVX512VL__
-  extern void avx_backtrace_matches_iter(uint64_t* operations);
-  #endif
-#endif
+//   #if __AVX512CD__ && __AVX512VL__
+//   extern void avx_backtrace_matches_iter(uint64_t* operations);
+//   #endif
+// #endif
 /*
  * Wavefront type
  */
@@ -92,12 +92,12 @@ void wavefront_backtrace_matches(
   // Update offset first
   cigar->begin_offset -= num_matches;
   //Blocks of 64-matches 
-  while (num_matches >= 64) {
-    //initial version
-    operations -= 64;
-    avx_backtrace_matches_iter((uint64_t*)(operations+1));
-    num_matches -= 64;
-  }
+  // while (num_matches >= 64) {
+  //   //initial version
+  //   operations -= 64;
+  //   avx_backtrace_matches_iter((uint64_t*)(operations+1));
+  //   num_matches -= 64;
+  // }
   // Blocks of 8-matches
   while (num_matches >= 8) {
     operations -= 8; //technically a continous offset so I would just need to do -64 for mine

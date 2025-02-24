@@ -292,6 +292,7 @@ void wavefront_bialign_breakpoint_m2m(
     const wf_offset_t moffset_1 = mwf_1->offsets[k_1];
     const int mh_0 = WAVEFRONT_H(k_0,moffset_0);
     const int mh_1 = WAVEFRONT_H(k_1,moffset_1);
+
     // Check breakpoint m2m
     if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score) {
       if (breakpoint_forward) {
@@ -318,8 +319,8 @@ void wavefront_bialign_breakpoint_m2m(
   }
 }
 
-#include <immintrin.h>
 
+#if __AVX512CD__ && __AVX512VL__
 void wavefront_bialign_breakpoint_m2m_avx512(
     wavefront_aligner_t* const wf_aligner,
     const bool breakpoint_forward,
@@ -347,26 +348,30 @@ void wavefront_bialign_breakpoint_m2m_avx512(
   const int min_hi = (hi_0 < hi_1) ? hi_0 : hi_1;
   const int max_lo = (lo_0 > lo_1) ? lo_0 : lo_1;
 
-  // Vectorized processing of k_0 values
-  for (int k_0 = max_lo; k_0 <= min_hi; k_0 += 16) { // Process 16 at a time
-    __m512i vk_0 = _mm512_set_epi32(
+  for (int k_0 = max_lo; k_0 <= min_hi; k_0 += 16) {
+    __m512i k0_vector = _mm512_set_epi32(
         k_0+15, k_0+14, k_0+13, k_0+12, k_0+11, k_0+10, k_0+9, k_0+8,
         k_0+7, k_0+6, k_0+5, k_0+4, k_0+3, k_0+2, k_0+1, k_0);
     
-    // Compute k_1 = text_length - pattern_length - k_0
-    __m512i vk_1 = _mm512_sub_epi32(_mm512_set1_epi32(text_length - pattern_length), vk_0);
+    __mm512i k1_vector, moffset_0, moffset_1;
+    __mmask16 mask1, mask2;
 
-    // Gather offsets
-    __m512i moffset_0 = _mm512_i32gather_epi32(vk_0, mwf_0->offsets, 4);
-    __m512i moffset_1 = _mm512_i32gather_epi32(vk_1, mwf_1->offsets, 4);
+    avx_wavefront_overlap_breakpoint_compute(&k0_vector, &k1_vector, &moffset_0, &moffset_1, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets, &mask1, &mask2);
 
-    // Compute mh_0 and mh_1 (just the offset values)
-    __m512i vmh_0 = moffset_0;
-    __m512i vmh_1 = moffset_1;
+    // // Compute k_1 = text_length - pattern_length - k_0
+    // __m512i vk_1 = _mm512_sub_epi32(tp_diff, k0_vector);
+
+    // // Gather offsets
+    // __m512i moffset_0 = _mm512_i32gather_epi32(k0_vector, mwf_0->offsets, 4);
+    // __m512i moffset_1 = _mm512_i32gather_epi32(k1_vector, mwf_1->offsets, 4);
+
+    // // Compute mh_0 and mh_1 (just the offset values)
+    // __m512i m0_h_vector = moffset_0;
+    // __m512i m1_h_vector = moffset_1;
 
     // Check condition: (mh_0 + mh_1 >= text_length)
-    __m512i v_mh_sum = _mm512_add_epi32(vmh_0, vmh_1);
-    __mmask16 mask = _mm512_cmpge_epi32_mask(v_mh_sum, _mm512_set1_epi32(text_length));
+    __m512i v_mh_sum = _mm512_add_epi32(m0_h_vector, m1_h_vector);
+     = _mm512_cmpge_epi32_mask(v_mh_sum, _mm512_set1_epi32(text_length)); ///////
 
     // Check breakpoint condition
     __m512i vscore_sum = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
@@ -401,6 +406,7 @@ void wavefront_bialign_breakpoint_m2m_avx512(
     }
   }
 }
+#endif
 
 /* _____________________________________________________________________________________________________________________________________
 
@@ -442,7 +448,6 @@ void wavefront_bialign_overlap(
     if (score_i < 0) break;
     const int score_mod_i = score_i % max_score_scope;
 
-    // skip this part `~~~~~~~~~~~~~~~~~~~~~~~
     // Check I2/D2-breakpoints (gap_affine_2p)
     if (distance_metric == gap_affine_2p) {
       if (score_0 + score_i - gap_opening2 >= breakpoint->score) continue;
@@ -461,7 +466,6 @@ void wavefront_bialign_overlap(
             i2wf_0,i2wf_1,affine2p_matrix_I2,breakpoint);
       }
     }
-    // skip ~~~~~~~~~~~~~~~
 
     // Check I1/D1-breakpoints (gap_affine)
     if (distance_metric >= gap_affine) {
@@ -492,88 +496,6 @@ void wavefront_bialign_overlap(
   }
 }
 
-#if __AVX512CD__ && __AVX512VL__
-FORCE_NO_INLINE void wavefront_bialign_overlap_avx512(
-    wavefront_aligner_t* const wf_aligner_0,
-    wavefront_aligner_t* const wf_aligner_1,
-    const int score_0,
-    const int score_1,
-    const bool breakpoint_forward,
-    wf_bialign_breakpoint_t* const breakpoint) {
-
-    const int max_score_scope = wf_aligner_0->wf_components.max_score_scope;
-    const distance_metric_t distance_metric = wf_aligner_0->penalties.distance_metric;
-    const int gap_opening1 = wf_aligner_0->penalties.gap_opening1;
-
-    const int score_mod_0 = score_0 % max_score_scope;
-    wavefront_t* const mwf_0 = wf_aligner_0->wf_components.mwavefronts[score_mod_0];
-    if (mwf_0 == NULL) return;
-    wavefront_t* d1wf_0 = NULL, *i1wf_0 = NULL;
-    if (distance_metric >= gap_affine) {
-        d1wf_0 = wf_aligner_0->wf_components.d1wavefronts[score_mod_0];
-        i1wf_0 = wf_aligner_0->wf_components.i1wavefronts[score_mod_0];
-    }
-
-    __m512i i_vec = _mm512_set_epi32(15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
-    __m512i score_1_vec = _mm512_set1_epi32(score_1);
-    __m512i score_0_vec = _mm512_set1_epi32(score_0);
-    __m512i gap_opening1_vec = _mm512_set1_epi32(gap_opening1);
-    __m512i breakpoint_score_vec = _mm512_set1_epi32(breakpoint->score);
-    __m512i max_score_scope_vec = _mm512_set1_epi32(max_score_scope - 1);
-
-    for (int base_i = 0; base_i < max_score_scope; base_i += 16) {
-        __m512i score_i_vec = _mm512_sub_epi32(score_1_vec, i_vec);
-        __mmask16 score_i_mask = _mm512_cmp_epi32_mask(score_i_vec, _mm512_set1_epi32(0), _MM_CMPINT_LT);
-
-        if (score_i_mask == 0xFFFF) break; // All score_i values are negative.
-
-        __m512i score_mod_i_vec = _mm512_and_epi32(score_i_vec, max_score_scope_vec);
-
-        __m512i d1wf_1_vec = _mm512_i32gather_epi32(score_mod_i_vec, wf_aligner_1->wf_components.d1wavefronts, 4);
-        __m512i i1wf_1_vec = _mm512_i32gather_epi32(score_mod_i_vec, wf_aligner_1->wf_components.i1wavefronts, 4);
-        __m512i mwf_1_vec = _mm512_i32gather_epi32(score_mod_i_vec, wf_aligner_1->wf_components.mwavefronts, 4);
-
-        __mmask16 d1_mask = _mm512_cmp_epi32_mask(d1wf_1_vec, _mm512_setzero_si512(), _MM_CMPINT_NE);
-        __mmask16 i1_mask = _mm512_cmp_epi32_mask(i1wf_1_vec, _mm512_setzero_si512(), _MM_CMPINT_NE);
-        __mmask16 m_mask = _mm512_cmp_epi32_mask(mwf_1_vec, _mm512_setzero_si512(), _MM_CMPINT_NE);
-
-        __m512i d1_check_vec = _mm512_sub_epi32(_mm512_add_epi32(score_0_vec, score_i_vec), gap_opening1_vec);
-        __mmask16 d1_breakpoint_mask = _mm512_cmp_epi32_mask(d1_check_vec, breakpoint_score_vec, _MM_CMPINT_LT);
-
-        __m512i m_check_vec = _mm512_add_epi32(score_0_vec, score_i_vec);
-        __mmask16 m_breakpoint_mask = _mm512_cmp_epi32_mask(m_check_vec, breakpoint_score_vec, _MM_CMPINT_LT);
-
-        if (d1_mask && d1_breakpoint_mask) {
-            for (int j = 0; j < 16; ++j) {
-                if ((d1_mask & d1_breakpoint_mask & (1 << j))) {
-                    wavefront_bialign_breakpoint_indel2indel(
-                        wf_aligner_0, breakpoint_forward, score_0, score_1 - (base_i + j),
-                        d1wf_0, (wavefront_t*)_mm512_extracti32x16_epi32(d1wf_1_vec, j), affine2p_matrix_D1, breakpoint);
-                }
-            }
-        }
-        if (i1_mask && d1_breakpoint_mask) {
-            for (int j = 0; j < 16; ++j) {
-                if ((i1_mask & d1_breakpoint_mask & (1 << j))) {
-                    wavefront_bialign_breakpoint_indel2indel(
-                        wf_aligner_0, breakpoint_forward, score_0, score_1 - (base_i + j),
-                        i1wf_0, (wavefront_t*)_mm512_extracti32x16_epi32(i1wf_1_vec, j), affine2p_matrix_I1, breakpoint);
-                }
-            }
-        }
-        if (m_mask && m_breakpoint_mask) {
-            for (int j = 0; j < 16; ++j) {
-                if ((m_mask & m_breakpoint_mask & (1 << j))) {
-                    wavefront_bialign_breakpoint_m2m(
-                        wf_aligner_0, breakpoint_forward, score_0, score_1 - (base_i + j),
-                        mwf_0, (wavefront_t*)_mm512_extracti32x16_epi32(mwf_1_vec, j), breakpoint);
-                }
-            }
-        }
-        i_vec = _mm512_add_epi32(i_vec, _mm512_set1_epi32(16));
-    }
-}
-#endif
 //=============================================================================================================
 
 

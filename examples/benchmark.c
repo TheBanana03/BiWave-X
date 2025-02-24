@@ -124,6 +124,7 @@ void execute_wfa_basic(char* pattern, char* text, bool avx) {
 int main() {
     int num_iters = 10;
     int num_seq = 5;
+    int num_text = 5;
     
     struct timespec start, end;
 
@@ -139,6 +140,12 @@ int main() {
     char curr_file[50];
     
     srand(time(NULL));
+
+    int total_text = count_sequences(ref_file);
+    if (total_text <= 0) {
+        fprintf(stderr, "No sequences found in file.\n");
+        return EXIT_FAILURE;
+    }
 
     // there are errors in the building, but it still compiles successfully
     // make[1]: *** [Makefile:33: align_benchmark] Error 1
@@ -178,13 +185,11 @@ int main() {
                 // }
                 
                 // generate_dna(text, text_length);
-                char* text = extract_sequence(ref_file, 0);
                 
                 int target_line = rand() % total_seq;
                 char* pattern = extract_sequence(curr_file, target_line);
                 if (!pattern) {
                     fprintf(stderr, "Failed to get random pattern. Skipping...\n");
-                    free(text);
                     continue;
                 }
                 
@@ -197,22 +202,34 @@ int main() {
                 total_time[1] = 0;
                 average_time[1] = 0;
                 time_taken[1] = 0;
-                
-                for (int j = 0; j < num_iters; j++) {
-                    // Test avx
-                    clock_gettime(CLOCK_MONOTONIC, &start);
-                    execute_wfa_basic(pattern, text, true);
-                    clock_gettime(CLOCK_MONOTONIC, &end);
-                    time_taken[0] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-                    total_time[0] += time_taken[0];
-                    // printf("Iteration %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken[0]/1e9, time_taken[0]);
 
-                    // Test original
-                    clock_gettime(CLOCK_MONOTONIC, &start);
-                    execute_wfa_basic(pattern, text, false);
-                    clock_gettime(CLOCK_MONOTONIC, &end);
-                    time_taken[1] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-                    total_time[1] += time_taken[1];
+                for (int l = 0; l < num_text; l++) {
+                    int target_text = rand() % total_text;
+                    char* text = extract_sequence(ref_file, target_text);
+                    if (!text) {
+                        fprintf(stderr, "Failed to get random text. Skipping...\n");
+                        free(pattern);
+                        continue;
+                    }
+                    
+                    for (int j = 0; j < num_iters; j++) {
+                        // Test avx
+                        clock_gettime(CLOCK_MONOTONIC, &start);
+                        execute_wfa_basic(pattern, text, true);
+                        clock_gettime(CLOCK_MONOTONIC, &end);
+                        time_taken[0] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                        total_time[0] += time_taken[0];
+                        // printf("Iteration %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken[0]/1e9, time_taken[0]);
+    
+                        // Test original
+                        clock_gettime(CLOCK_MONOTONIC, &start);
+                        execute_wfa_basic(pattern, text, false);
+                        clock_gettime(CLOCK_MONOTONIC, &end);
+                        time_taken[1] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                        total_time[1] += time_taken[1];
+                    }
+
+                    free(text);
                 }
                 
                 average_time[0] = total_time[0]/num_iters;
@@ -222,8 +239,8 @@ int main() {
                 total_time_per_len[1] += average_time[1];
     
                 free(pattern);
-                free(text);
             }
+                
             average_time_per_len[0] += total_time_per_len[0]/num_len;
             average_time_per_len[1] += total_time_per_len[1]/num_len;
             printf("| Text Length: %s\t|\t%.6fs (%lldns)\t|\t%.6fs (%lldns)\t|\n", file_names[k], average_time_per_len[0]/1e9, average_time_per_len[0],  average_time_per_len[1]/1e9, average_time_per_len[1]);

@@ -353,10 +353,10 @@ void wavefront_bialign_breakpoint_m2m_avx512(
         k_0+15, k_0+14, k_0+13, k_0+12, k_0+11, k_0+10, k_0+9, k_0+8,
         k_0+7, k_0+6, k_0+5, k_0+4, k_0+3, k_0+2, k_0+1, k_0);
     
-    __mm512i k1_vector, moffset_0, moffset_1;
+    __m512i k1_vector, moffset_0, moffset_1;
     __mmask16 mask1, mask2;
 
-    avx_wavefront_overlap_breakpoint_compute(&k0_vector, &k1_vector, &moffset_0, &moffset_1, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets, &mask1, &mask2);
+    avx_wavefront_overlap_breakpoint_m2m(&k0_vector, &k1_vector, &moffset_0, &moffset_1, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets, &mask1);
 
     // // Compute k_1 = text_length - pattern_length - k_0
     // __m512i vk_1 = _mm512_sub_epi32(tp_diff, k0_vector);
@@ -370,15 +370,17 @@ void wavefront_bialign_breakpoint_m2m_avx512(
     // __m512i m1_h_vector = moffset_1;
 
     // Check condition: (mh_0 + mh_1 >= text_length)
-    __m512i v_mh_sum = _mm512_add_epi32(m0_h_vector, m1_h_vector);
-     = _mm512_cmpge_epi32_mask(v_mh_sum, _mm512_set1_epi32(text_length)); ///////
+    // __m512i v_mh_sum = _mm512_add_epi32(m0_h_vector, m1_h_vector);
+    //  = _mm512_cmpge_epi32_mask(v_mh_sum, _mm512_set1_epi32(text_length));
+
+
 
     // Check breakpoint condition
     __m512i vscore_sum = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
-    __mmask16 mask_valid = _mm512_cmplt_epi32_mask(vscore_sum, _mm512_set1_epi32(breakpoint->score));
+    mask2 = _mm512_cmplt_epi32_mask(vscore_sum, _mm512_set1_epi32(breakpoint->score));
 
     // Masked update (if both conditions are met)
-    __mmask16 final_mask = mask & mask_valid;
+    __mmask16 final_mask = mask1 & mask2;
     if (_mm512_mask2int(final_mask)) { // If any lane satisfies the condition
       int line = _tzcnt_u32(_mm512_mask2int(final_mask));
       int final_k_0 = k_0 + line;

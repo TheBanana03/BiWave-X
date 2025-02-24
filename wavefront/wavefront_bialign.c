@@ -358,23 +358,6 @@ void wavefront_bialign_breakpoint_m2m_avx512(
 
     avx_wavefront_overlap_breakpoint_m2m(&k0_vector, &k1_vector, &moffset_0, &moffset_1, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets, &mask1);
 
-    // // Compute k_1 = text_length - pattern_length - k_0
-    // __m512i vk_1 = _mm512_sub_epi32(tp_diff, k0_vector);
-
-    // // Gather offsets
-    // __m512i moffset_0 = _mm512_i32gather_epi32(k0_vector, mwf_0->offsets, 4);
-    // __m512i moffset_1 = _mm512_i32gather_epi32(k1_vector, mwf_1->offsets, 4);
-
-    // // Compute mh_0 and mh_1 (just the offset values)
-    // __m512i m0_h_vector = moffset_0;
-    // __m512i m1_h_vector = moffset_1;
-
-    // Check condition: (mh_0 + mh_1 >= text_length)
-    // __m512i v_mh_sum = _mm512_add_epi32(m0_h_vector, m1_h_vector);
-    //  = _mm512_cmpge_epi32_mask(v_mh_sum, _mm512_set1_epi32(text_length));
-
-
-
     // mask2 condition
     __m512i vscore_sum = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
     mask2 = _mm512_cmplt_epi32_mask(vscore_sum, _mm512_set1_epi32(breakpoint->score));

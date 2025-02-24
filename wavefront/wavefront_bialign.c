@@ -52,7 +52,7 @@
 #if __AVX512CD__ && __AVX512VL__
 #include <immintrin.h>
 
-extern uint16_t avx_wavefront_overlap_breakpoint_m2m(__m512i k0_vec, __m512i tlen_vec, __m512i plen_vec, __m512i score0_vec, __m512i score1_vec, __m512i breakpoint_score_vec, const wf_offset_t* mwf_0_offsets, const wf_offset_t* mwf_1_offsets, int text_length, __m512i* moffset0_vec, __m512i* moffset1_vec, __m512i* k1_vec);
+extern void avx_wavefront_overlap_breakpoint_m2m(__m512i*, __m512i*, __m512i*, int32_t, int32_t, int32_t*, int32_t*, __mmask16*);
 #endif
 
 /*

@@ -28,7 +28,7 @@
  * AUTHOR(S): Santiago Marco-Sola <santiagomsola@gmail.com>
  */
 
-#include "utils/commons.h"
+#include "/home/yuzu_/WFA2-lib/utils/commons.h"
 #include "wavefront_bialigner.h"
 #include "wavefront_aligner.h"
 #include "wavefront_attributes.h"

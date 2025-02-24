@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <time.h>
 #include <string.h>
 #include <unistd.h>
@@ -93,15 +94,15 @@ void print_sequences(char* pattern, char* text, int pattern_number, int text_len
     }
 }
 
-void execute_wfa_basic(char* pattern, char* text) {
+void execute_wfa_basic(char* pattern, char* text, bool avx) {
     pid_t pid = fork();
     
     if (pid < 0) {
         perror("Fork failed");
         exit(EXIT_FAILURE);
     } else if (pid == 0) {
-        // Child process: Execute wfa_basic
-        char *args[] = {"./wfa_basic", (char*)pattern, (char*)text, NULL};
+        const char *wfa_path = avx ? "./wfa_basic" : "/home/jupyter-administrator/WFA/WFA2-lib/examples/wfa_basic";
+        char *args[] = {(char *)wfa_path, (char *)pattern, (char *)text, NULL};
         execvp(args[0], args);
         
         // If execlp fails, print error and exit child process
@@ -126,11 +127,11 @@ int main() {
     
     struct timespec start, end;
 
-    long long total_time;
-    long long average_time;
-    long long total_time_per_len;
-    long long average_time_per_len;
-    long long time_taken;
+    long long total_time[2];
+    long long average_time[2];
+    long long total_time_per_len[2];
+    long long average_time_per_len[2];
+    long long time_taken[2];
 
     int num_len = 5;
     const char* file_names[] = {"150", "300", "500", "750", "1000"};
@@ -154,8 +155,11 @@ int main() {
                 return EXIT_FAILURE;
             }
 
-            total_time_per_len = 0;
-            average_time_per_len = 0;
+            total_time_per_len[0] = 0;
+            average_time_per_len[0] = 0;
+
+            total_time_per_len[1] = 0;
+            average_time_per_len[1] = 0;
 
             printf("Testing for text length %s\n", file_names[k]);
             
@@ -182,33 +186,44 @@ int main() {
                 
                 // print_sequences(pattern, text, target_line, text_length);
                 
-                total_time = 0;
-                average_time = 0;
-                time_taken = 0;
+                total_time[0] = 0;
+                average_time[0] = 0;
+                time_taken[0] = 0;
+
+                total_time[1] = 0;
+                average_time[1] = 0;
+                time_taken[1] = 0;
                 
                 for (int j = 0; j < num_iters; j++) {
+                    // Test avx
                     clock_gettime(CLOCK_MONOTONIC, &start);
-        
-                    execute_wfa_basic(pattern, text);
-        
+                    execute_wfa_basic(pattern, text, true);
                     clock_gettime(CLOCK_MONOTONIC, &end);
-        
-                    // Compute elapsed time in nanoseconds
-                    time_taken = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
-                    total_time += time_taken;
-        
-                    // printf("Iteration %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken/1e9, time_taken);
+                    time_taken[0] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                    total_time[0] += time_taken[0];
+                    // printf("Iteration %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken[0]/1e9, time_taken[0]);
+
+                    // Test original
+                    clock_gettime(CLOCK_MONOTONIC, &start);
+                    execute_wfa_basic(pattern, text, false);
+                    clock_gettime(CLOCK_MONOTONIC, &end);
+                    time_taken[1] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                    total_time[1] += time_taken[1];
                 }
                 
-                average_time = total_time/num_iters;
-                total_time_per_len += average_time;
-                // printf("Average execution time: %.6fs (%lldns)\n\n", average_time/1e9, average_time);
+                average_time[0] = total_time[0]/num_iters;
+                total_time_per_len[0] += average_time[0];
+                // printf("Average execution time: %.6fs (%lldns)\n\n", average_time[0]/1e9, average_time[0]);
+                average_time[1] = total_time[1]/num_iters;
+                total_time_per_len[1] += average_time[1];
     
                 free(pattern);
                 free(text);
             }
-            average_time_per_len += total_time_per_len/num_len;
-            printf("Average execution time: %.6fs (%lldns)\n\n", average_time_per_len/1e9, average_time_per_len);
+            average_time_per_len[0] += total_time_per_len[0]/num_len;
+            average_time_per_len[1] += total_time_per_len[1]/num_len;
+            printf("Average execution time for avx vers: %.6fs (%lldns)\n", average_time_per_len[0]/1e9, average_time_per_len[0]);
+            printf("Average execution time for original: %.6fs (%lldns)\n", average_time_per_len[1]/1e9, average_time_per_len[1]);
         }
     }
     

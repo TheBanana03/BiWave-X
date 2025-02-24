@@ -23,8 +23,8 @@ avx512_wavefront_overlap_breakpoint_m2m:
     mov rbx, [rsp+24]
     vgatherdps zmm5, [rax+zmm0*4]  ; moffsets_0 vector
     vgatherdps zmm6, [rbx+zmm1*4]  ; moffsets_1 vector
-    vmovdqu32 [rdx], zmm5
-    vmovdqu32 [rcx], zmm6
+    ; vmovdqu32 [rdx], zmm5   not needed outside
+    ; vmovdqu32 [rcx], zmm6
 
 
     ; Check (mh_0 + mh_1 >= text_length)  ;;  condition (score_0 + score_1 < breakpoint->score) is checked outside
@@ -32,7 +32,10 @@ avx512_wavefront_overlap_breakpoint_m2m:
     ; therefore; mh_0 and mh_1 are just moffset_0 and moffset_1
     vpaddd zmm7, zmm5, zmm6  ; mh0 + mh1
     vpcmpgtd k1, zmm7, zmm2
-    ;; pass the mask back
-
+    
+    ; pass the mask back
+    mov rax, [rsp+32]
+    kmovw eax, k1
+    mov [rax], eax
 
     ret

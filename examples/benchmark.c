@@ -219,7 +219,7 @@ int main() {
                         clock_gettime(CLOCK_MONOTONIC, &end);
                         time_taken[0] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
                         total_time[0] += time_taken[0];
-                        // printf("Iteration %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken[0]/1e9, time_taken[0]);
+                        // printf("Iteration (A) %d: Time taken = %.6fs (%lldns)\t", j+1, time_taken[0]/1e9, time_taken[0]);
     
                         // Test original
                         clock_gettime(CLOCK_MONOTONIC, &start);
@@ -227,6 +227,7 @@ int main() {
                         clock_gettime(CLOCK_MONOTONIC, &end);
                         time_taken[1] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
                         total_time[1] += time_taken[1];
+                        // printf("Iteration (O) %d: Time taken = %.6fs (%lldns)\t", j+1, time_taken[1]/1e9, time_taken[1]);
                     }
 
                     free(text);
@@ -234,9 +235,10 @@ int main() {
                 
                 average_time[0] = total_time[0]/num_iters;
                 total_time_per_len[0] += average_time[0];
-                // printf("Average execution time: %.6fs (%lldns)\n\n", average_time[0]/1e9, average_time[0]);
+
                 average_time[1] = total_time[1]/num_iters;
                 total_time_per_len[1] += average_time[1];
+                printf("Average execution time: %.6fs (%lldns)\t%.6fs (%lldns)\n\n", average_time[0]/1e9, average_time[0], average_time[1]/1e9, average_time[1]);
     
                 free(pattern);
             }

@@ -70,8 +70,8 @@ int main(int argc, char* argv[]) {
   // Display alignment
   // fprintf(stderr,"  PATTERN  %s\n",pattern);
   // fprintf(stderr,"  TEXT     %s\n",text);
-  // fprintf(stderr,"  SCORE (RE)COMPUTED %d\n",
-  //     cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
+  fprintf(stderr,"  SCORE (RE)COMPUTED %d\n",
+       cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
   // cigar_print_pretty(stderr,wf_aligner->cigar,
   //     pattern,strlen(pattern),text,strlen(text));
     

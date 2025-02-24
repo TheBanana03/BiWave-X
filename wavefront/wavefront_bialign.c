@@ -375,13 +375,14 @@ void wavefront_bialign_breakpoint_m2m_avx512(
 
 
 
-    // Check breakpoint condition
+    // mask2 condition
     __m512i vscore_sum = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
     mask2 = _mm512_cmplt_epi32_mask(vscore_sum, _mm512_set1_epi32(breakpoint->score));
 
-    // Masked update (if both conditions are met)
+
+    // if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score)
     __mmask16 final_mask = mask1 & mask2;
-    if (_mm512_mask2int(final_mask)) { // If any lane satisfies the condition
+    if (_mm512_mask2int(final_mask)) {
       int line = _tzcnt_u32(_mm512_mask2int(final_mask));
       int final_k_0 = k_0 + line;
       int final_k_1 = text_length - pattern_length - final_k_0;

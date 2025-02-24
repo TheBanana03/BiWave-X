@@ -144,7 +144,13 @@ int main() {
     // make[1]: *** [Makefile:33: align_benchmark] Error 1
     // make[1]: Leaving directory '/home/jupyter-administrator/WFA2-lib/tools/align_benchmark'
     // make: *** [Makefile:90: tools/align_benchmark] Error 2
-    if (system("bash build.sh") || 1) {
+    if (/*system("bash build.sh") ||*/ 1) {
+        printf("|---------------------------------------------------------------------------------------|\n");
+        printf("|\t\t\t\tAverage Execution Time\t\t\t\t\t|\n");
+        printf("|-----------------------|-------------------------------|-------------------------------|\n");
+        printf("|              \t\t|\t       AVX      \t|\t     Original       \t|\n");
+        printf("|-----------------------|-------------------------------|-------------------------------|\n");
+        
         for (int k = 0; k < num_len; k++) {
             
             snprintf(curr_file, sizeof(curr_file), "./test_cases/%s.txt", file_names[k]);
@@ -160,8 +166,6 @@ int main() {
 
             total_time_per_len[1] = 0;
             average_time_per_len[1] = 0;
-
-            printf("Testing for text length %s\n", file_names[k]);
             
             for (int i = 0; i < num_seq; i++) {
                 int pattern_length = 150;
@@ -222,9 +226,9 @@ int main() {
             }
             average_time_per_len[0] += total_time_per_len[0]/num_len;
             average_time_per_len[1] += total_time_per_len[1]/num_len;
-            printf("Average execution time for avx vers: %.6fs (%lldns)\n", average_time_per_len[0]/1e9, average_time_per_len[0]);
-            printf("Average execution time for original: %.6fs (%lldns)\n", average_time_per_len[1]/1e9, average_time_per_len[1]);
+            printf("| Text Length: %s\t|\t%.6fs (%lldns)\t|\t%.6fs (%lldns)\t|\n", file_names[k], average_time_per_len[0]/1e9, average_time_per_len[0],  average_time_per_len[1]/1e9, average_time_per_len[1]);
         }
+        printf("|-----------------------|-------------------------------|-------------------------------|\n");
     }
     
     return 0;

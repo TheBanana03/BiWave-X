@@ -52,7 +52,7 @@
 #if __AVX512CD__ && __AVX512VL__
 #include <immintrin.h>
 
-extern void avx_wavefront_overlap_breakpoint_m2m(__m512i*, __m512i*, __m512i*, int32_t, int32_t, int32_t*, int32_t*, __mmask16*);
+extern void avx_wavefront_overlap_breakpoint_check(__m512i*, __m512i*, __m512i*, int32_t, int32_t, int32_t*, int32_t*, __mmask16*);
 #endif
 
 /*
@@ -359,8 +359,8 @@ void wavefront_bialign_breakpoint_m2m_avx512(
     avx_wavefront_overlap_breakpoint_m2m(&k0_vector, &k1_vector, &moffset_0, &moffset_1, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets, &mask1);
 
     // mask2 condition
-    __m512i vscore_sum = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
-    mask2 = _mm512_cmplt_epi32_mask(vscore_sum, _mm512_set1_epi32(breakpoint->score));
+    __m512i score_sum_vector = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
+    mask2 = _mm512_cmplt_epi32_mask(score_sum_vector, _mm512_set1_epi32(breakpoint->score));
 
 
     // if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score)

@@ -1,17 +1,17 @@
 section .text
-global avx512_wavefront_overlap_breakpoint_m2m
+global avx512_wavefront_overlap_breakpoint_check
 
-avx512_wavefront_overlap_breakpoint_m2m:
+avx512_wavefront_overlap_breakpoint_check:
     ;             rdi         rsi         rdx          rcx       r8    r9      rsp+16           +24          +32
-    ; params: &k0_vector, &k1_vector,  &moffset_0, &moffset_1, tlen, plen, mwf_0->offsets, mwf_1->offsets, &mask
+    ; params: &k0_vector, &k1_vector,  &moffset_0, &moffset_1, tlen, plen, mwf_0->offsets, mwf_1->offsets, &mask1
     vmovdqu32 zmm0, [rdi] ; k0_vector
 
-    ; WAVEFRONT_K_INVERSE(tlen-plen-k)
+    ; WAVEFRONT_K_INVERSE(k,tlen,plen)  (tlen-plen-k)
     mov eax, r8d  ; tlen
     mov ebx, r9d  ; plen
     mov ecx, eax
     sub ecx, ebx
-    vpbroadcastd zmm2, eax
+    vpbroadcastd zmm2, ecx
     vpbroadcastd zmm3, ebx
 
     vsubpd zmm1, zmm2, zmm0 ; k1_vector values

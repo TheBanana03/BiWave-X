@@ -562,7 +562,7 @@ FORCE_NO_INLINE wf_offset_t wavefront_extend_matches_packed_end2end_max_avx512(
 
     __m512i offset_max = _mm512_maskz_slli_epi32(null_mask, offsets_vector, 1); 
     offset_max         = _mm512_maskz_sub_epi32(null_mask, offset_max, ks);
-    ks                 = _mm512_add_epi32(ks, sixteens); 
+    ks                 = _mm512_add_epi32(ks, sixteens);
     max_antidiag_v     = _mm512_mask_max_epi32(max_antidiag_v, null_mask, max_antidiag_v, offset_max);
 
     if(mask == 0) continue;

@@ -61,6 +61,8 @@ int main(int argc, char* argv[]) {
     
   // Initialize Wavefront Aligner
   wavefront_aligner_t* const wf_aligner = wavefront_aligner_new(&attributes);
+  
+  wf_aligner->bialigner = wavefront_bialigner_new(&attributes, attributes.plot);
   // Align
   wavefront_align(wf_aligner,pattern,strlen(pattern),text,strlen(text));
 

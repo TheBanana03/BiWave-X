@@ -49,6 +49,12 @@
 #define WF_BIALIGN_FALLBACK_MIN_LENGTH 100
 #define WF_BIALIGN_RECOVERY_MIN_SCORE  500
 
+#if __AVX512CD__ && __AVX512VL__
+#include <immintrin.h>
+
+extern void avx_wavefront_overlap_breakpoint_m2m(__m512i*, __m512i*, __m512i*, int32_t, int32_t, int32_t*, int32_t*, __mmask16*);
+#endif
+
 /*
  * Debug
  */
@@ -183,7 +189,9 @@ int wavefront_bialign_base(
     return WF_STATUS_UNATTAINABLE;
   }
 }
-/*
+
+
+/* _____________________________________________________________________________________________________________________________________
  * Bidirectional check breakpoints
  */
 void wavefront_bialign_breakpoint_indel2indel(
@@ -212,6 +220,7 @@ void wavefront_bialign_breakpoint_indel2indel(
   const int min_hi = MIN(hi_0,hi_1);
   const int max_lo = MAX(lo_0,lo_1);
   int k_0;
+  
   for (k_0=max_lo;k_0<=min_hi;k_0++) {
     const int k_1 = WAVEFRONT_K_INVERSE(k_0,pattern_length,text_length);
     // Fetch offsets
@@ -283,6 +292,7 @@ void wavefront_bialign_breakpoint_m2m(
     const wf_offset_t moffset_1 = mwf_1->offsets[k_1];
     const int mh_0 = WAVEFRONT_H(k_0,moffset_0);
     const int mh_1 = WAVEFRONT_H(k_1,moffset_1);
+
     // Check breakpoint m2m
     if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score) {
       if (breakpoint_forward) {
@@ -308,6 +318,85 @@ void wavefront_bialign_breakpoint_m2m(
     }
   }
 }
+
+
+#if __AVX512CD__ && __AVX512VL__
+void wavefront_bialign_breakpoint_m2m_avx512(
+    wavefront_aligner_t* const wf_aligner,
+    const bool breakpoint_forward,
+    const int score_0,
+    const int score_1,
+    wavefront_t* const mwf_0,
+    wavefront_t* const mwf_1,
+    wf_bialign_breakpoint_t* const breakpoint) {
+
+  // Load sequence information
+  wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+  const int text_length = sequences->text_length;
+  const int pattern_length = sequences->pattern_length;
+
+  // Load wavefront boundaries
+  const int lo_0 = mwf_0->lo;
+  const int hi_0 = mwf_0->hi;
+  const int lo_1 = text_length - pattern_length - mwf_1->hi;
+  const int hi_1 = text_length - pattern_length - mwf_1->lo;
+
+  // Check for non-overlapping regions
+  if (hi_1 < lo_0 || hi_0 < lo_1) return;
+
+  // Compute overlapping interval
+  const int min_hi = (hi_0 < hi_1) ? hi_0 : hi_1;
+  const int max_lo = (lo_0 > lo_1) ? lo_0 : lo_1;
+
+  for (int k_0 = max_lo; k_0 <= min_hi; k_0 += 16) {
+    __m512i k0_vector = _mm512_set_epi32(
+        k_0+15, k_0+14, k_0+13, k_0+12, k_0+11, k_0+10, k_0+9, k_0+8,
+        k_0+7, k_0+6, k_0+5, k_0+4, k_0+3, k_0+2, k_0+1, k_0);
+    
+    __m512i k1_vector, moffset_0, moffset_1;
+    __mmask16 mask1, mask2;
+
+    avx_wavefront_overlap_breakpoint_m2m(&k0_vector, &k1_vector, &moffset_0, &moffset_1, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets, &mask1);
+
+    // mask2 condition
+    __m512i vscore_sum = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
+    mask2 = _mm512_cmplt_epi32_mask(vscore_sum, _mm512_set1_epi32(breakpoint->score));
+
+
+    // if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score)
+    __mmask16 final_mask = mask1 & mask2;
+    if (_mm512_mask2int(final_mask)) {
+      int line = _tzcnt_u32(_mm512_mask2int(final_mask));
+      int final_k_0 = k_0 + line;
+      int final_k_1 = text_length - pattern_length - final_k_0;
+
+      if (breakpoint_forward) {
+        breakpoint->score_forward = score_0;
+        breakpoint->score_reverse = score_1;
+        breakpoint->k_forward = final_k_0;
+        breakpoint->k_reverse = final_k_1;
+        breakpoint->offset_forward = mwf_0->offsets[final_k_0];
+        breakpoint->offset_reverse = mwf_1->offsets[final_k_1];
+      } else {
+        breakpoint->score_forward = score_1;
+        breakpoint->score_reverse = score_0;
+        breakpoint->k_forward = final_k_1;
+        breakpoint->k_reverse = final_k_0;
+        breakpoint->offset_forward = mwf_1->offsets[final_k_1];
+        breakpoint->offset_reverse = mwf_0->offsets[final_k_0];
+      }
+
+      breakpoint->score = score_0 + score_1;
+      breakpoint->component = affine2p_matrix_M;
+      return;
+    }
+  }
+}
+#endif
+
+/* _____________________________________________________________________________________________________________________________________
+
+//=============================================================================================================
 /*
  * Bidirectional find overlaps
  */
@@ -344,6 +433,7 @@ void wavefront_bialign_overlap(
     const int score_i = score_1 - i;
     if (score_i < 0) break;
     const int score_mod_i = score_i % max_score_scope;
+
     // Check I2/D2-breakpoints (gap_affine_2p)
     if (distance_metric == gap_affine_2p) {
       if (score_0 + score_i - gap_opening2 >= breakpoint->score) continue;
@@ -362,6 +452,7 @@ void wavefront_bialign_overlap(
             i2wf_0,i2wf_1,affine2p_matrix_I2,breakpoint);
       }
     }
+
     // Check I1/D1-breakpoints (gap_affine)
     if (distance_metric >= gap_affine) {
       if (score_0 + score_i - gap_opening1 >= breakpoint->score) continue;
@@ -390,6 +481,10 @@ void wavefront_bialign_overlap(
     }
   }
 }
+
+//=============================================================================================================
+
+
 /*
  * Bidirectional breakpoint detection
  */
@@ -408,6 +503,9 @@ int wavefront_bialign_overlap_gopen_adjust(
       return 0;
   }
 }
+
+
+//~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 int wavefront_bialign_find_breakpoint(
     wavefront_bialigner_t* const bialigner,
     const distance_metric_t distance_metric,
@@ -517,6 +615,9 @@ int wavefront_bialign_find_breakpoint(
   // Return OK
   return WF_STATUS_OK;
 }
+
+
+
 int wavefront_bialign_find_breakpoint_exception(
     wavefront_aligner_t* const wf_aligner,
     alignment_form_t* const form,
@@ -578,6 +679,7 @@ void wavefront_bialign_init_half_1(
   half_form->text_begin_free = 0;
   half_form->text_end_free = global_form->text_end_free;
 }
+
 int wavefront_bialign_alignment(
     wavefront_aligner_t* const wf_aligner,
     alignment_form_t* const form,

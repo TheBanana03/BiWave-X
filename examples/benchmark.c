@@ -85,14 +85,34 @@ char* extract_sequence(const char* filename, int target_line) {
     return sequence;
 }
 
-void print_sequences(char* pattern, char* text, int pattern_number, int text_length) {
+void print_sequences(char* pattern, char* text, int pattern_number, int text_number) {
     printf("Pattern (Seq %d):\t%s\n", pattern_number, pattern);
-    if (text_length > 20) {
-        printf("Text (%d):\t\t%.20s...\n", text_length, text);
-    } else {
-        printf("Text (%d):\t\t%s\n", text_length, text);
-    }
+    printf("Text (Seq %d):\t%s\n", text_number, text);
 }
+
+// int execute_wfa_basic(char* pattern, char* text, bool avx) {
+//     const char *wfa_path = avx ? "./wfa_basic" : "/home/jupyter-administrator/WFA/WFA2-lib/examples/wfa_basic";
+
+//     // Construct command
+//     char command[1024];
+//     snprintf(command, sizeof(command), "%s %s %s", wfa_path, pattern, text);
+
+//     // Open process
+//     FILE *fp = popen(command, "r");
+//     if (!fp) {
+//         perror("popen failed");
+//         return -1;
+//     }
+
+//     // Read score from output
+//     int score = -1;
+//     if (fscanf(fp, "%d", &score) != 1) {
+//         fprintf(stderr, "Failed to read score from wfa_basic.\n");
+//     }
+
+//     pclose(fp);
+//     return score;
+// }
 
 void execute_wfa_basic(char* pattern, char* text, bool avx) {
     pid_t pid = fork();
@@ -102,7 +122,8 @@ void execute_wfa_basic(char* pattern, char* text, bool avx) {
         exit(EXIT_FAILURE);
     } else if (pid == 0) {
         const char *wfa_path = avx ? "./wfa_basic" : "/home/jupyter-administrator/WFA/WFA2-lib/examples/wfa_basic";
-        char *args[] = {(char *)wfa_path, (char *)pattern, (char *)text, NULL};
+        char *args[] = {(char*)wfa_path, (char*)pattern, (char*)text, NULL};
+        // printf("%s, %s, %s", args[0], args[1], args[2]);
         execvp(args[0], args);
         
         // If execlp fails, print error and exit child process
@@ -121,13 +142,31 @@ void execute_wfa_basic(char* pattern, char* text, bool avx) {
     }
 }
 
+void read_metrics(char* file_name, int* score, long long* time_taken) {
+    FILE *file = fopen(file_name, "r");
+    if (!file) {
+        perror("Error opening score.txt");
+        return;
+    }
+    
+    if (fscanf(file, "%d %lld", score, time_taken) != 2) {
+        fprintf(stderr, "Failed to read score and time from score.txt\n");
+    }
+
+    fclose(file);
+}
+
 int main() {
-    int num_iters = 10;
+    int num_iters = 3;
     int num_seq = 5;
     int num_text = 5;
     
     struct timespec start, end;
 
+    int total_score[2] = {0, 0};
+    int curr_score[2];
+    float average_score[2];
+    float average_score_per_len[2];
     long long total_time[2];
     long long average_time[2];
     long long total_time_per_len[2];
@@ -151,6 +190,7 @@ int main() {
     // make[1]: *** [Makefile:33: align_benchmark] Error 1
     // make[1]: Leaving directory '/home/jupyter-administrator/WFA2-lib/tools/align_benchmark'
     // make: *** [Makefile:90: tools/align_benchmark] Error 2
+    
     if (/*system("bash build.sh") ||*/ 1) {
         printf("|---------------------------------------------------------------------------------------|\n");
         printf("|\t\t\t\tAverage Execution Time\t\t\t\t\t|\n");
@@ -173,6 +213,7 @@ int main() {
 
             total_time_per_len[1] = 0;
             average_time_per_len[1] = 0;
+
             
             for (int i = 0; i < num_seq; i++) {
                 int pattern_length = 150;
@@ -193,8 +234,6 @@ int main() {
                     continue;
                 }
                 
-                // print_sequences(pattern, text, target_line, text_length);
-                
                 total_time[0] = 0;
                 average_time[0] = 0;
                 time_taken[0] = 0;
@@ -211,23 +250,33 @@ int main() {
                         free(pattern);
                         continue;
                     }
+
+                    // print_sequences(pattern, text, target_line, text_length);
                     
                     for (int j = 0; j < num_iters; j++) {
                         // Test avx
-                        clock_gettime(CLOCK_MONOTONIC, &start);
                         execute_wfa_basic(pattern, text, true);
-                        clock_gettime(CLOCK_MONOTONIC, &end);
-                        time_taken[0] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                        read_metrics("score.txt", &curr_score[0], &time_taken[0]);
                         total_time[0] += time_taken[0];
                         // printf("Iteration (A) %d: Time taken = %.6fs (%lldns)\t", j+1, time_taken[0]/1e9, time_taken[0]);
-    
+
                         // Test original
-                        clock_gettime(CLOCK_MONOTONIC, &start);
                         execute_wfa_basic(pattern, text, false);
-                        clock_gettime(CLOCK_MONOTONIC, &end);
-                        time_taken[1] = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
+                        read_metrics("score.txt", &curr_score[1], &time_taken[1]);
                         total_time[1] += time_taken[1];
-                        // printf("Iteration (O) %d: Time taken = %.6fs (%lldns)\t", j+1, time_taken[1]/1e9, time_taken[1]);
+                        // printf("Iteration (O) %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken[1]/1e9, time_taken[1]);
+
+                        if (curr_score[0] != curr_score[1]) {
+                            printf("Error: Differing scores detected.\n");
+                            print_sequences(pattern, text, target_line, text_length);
+                            printf("AVX Score: %d\tOriginal Score: %d\n", curr_score[0], curr_score[1]);
+                            printf("Exiting...\n");
+                            free(pattern);
+                            free(text);
+                            return 1;
+                        }
+                        total_score[0] += curr_score[0];
+                        total_score[1] += curr_score[1];
                     }
 
                     free(text);
@@ -235,17 +284,20 @@ int main() {
                 
                 average_time[0] = total_time[0]/num_iters;
                 total_time_per_len[0] += average_time[0];
+                average_score[0] = (total_score[0]*1.0)/num_iters;
 
                 average_time[1] = total_time[1]/num_iters;
                 total_time_per_len[1] += average_time[1];
-                printf("Average execution time: %.6fs (%lldns)\t%.6fs (%lldns)\n\n", average_time[0]/1e9, average_time[0], average_time[1]/1e9, average_time[1]);
+                average_score[1] = (total_score[1]*1.0)/num_iters;
+                // printf("Average execution time: %.6fs (%lldns)\t%.6fs (%lldns)\n\n", average_time[0]/1e9, average_time[0], average_time[1]/1e9, average_time[1]);
     
                 free(pattern);
             }
                 
-            average_time_per_len[0] += total_time_per_len[0]/num_len;
-            average_time_per_len[1] += total_time_per_len[1]/num_len;
-            printf("| Text Length: %s\t|\t%.6fs (%lldns)\t|\t%.6fs (%lldns)\t|\n", file_names[k], average_time_per_len[0]/1e9, average_time_per_len[0],  average_time_per_len[1]/1e9, average_time_per_len[1]);
+            average_score_per_len[0] += average_score[0]/num_len;
+            average_score_per_len[1] += average_score[1]/num_len;
+            if (average_score_per_len[0] == average_score_per_len[1])
+                printf("| Text Length: %s\t|\t%.6fs (%lldns)\t|\t%.6fs (%lldns)\t|\t%f\t|\n", file_names[k], average_time_per_len[0]/1e9, average_time_per_len[0],  average_time_per_len[1]/1e9, average_time_per_len[1], average_score_per_len[0]);
         }
         printf("|-----------------------|-------------------------------|-------------------------------|\n");
     }

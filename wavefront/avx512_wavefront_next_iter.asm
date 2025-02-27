@@ -31,6 +31,7 @@ avx512_wavefront_next_iter1:
     
     vmovdqu32 [r9], zmm4 ;assignment to out_d1
     ret
+
 ;params will be (misms, out_i1, out_d1, max)
 avx512_wavefront_next_iter2: 
 ;final MAX(del1, MAX(misms, ins1))
@@ -67,13 +68,15 @@ avx512_wavefront_next_iter3:
     vmovdqu32 zmm2, [rdx] ;ks
     vpsubd zmm3, zmm0, zmm2; V = max - k's | ((offset)-(k)) #note: errors occur at vpbroadcastd line
     vpbroadcastd zmm1, eax
-    vpcmpud k3, zmm3, zmm1, 0x06 ;V > pattern length
+    vpcmpud k2, zmm3, zmm1, 0x06 ;V > pattern length
+
+    ;korw k3, k1, k2
 
     ;use vmovdqu32 with mask
     mov eax, 0xC0000000; nullvalue entry
     vpbroadcastd zmm5, eax ;broadcast null value
     vmovdqu32 zmm0 {k1}, zmm5
-    vmovdqu32 zmm0 {k2}, zmm5
+    ;vmovdqu32 zmm0 {k2}, zmm5
 
     vmovdqu32 [rsi], zmm0 ;assign output to out_m
     

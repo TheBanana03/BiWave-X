@@ -19,8 +19,9 @@ avx_wavefront_extension_iteration:
     vmovdqu32 zmm2, [rsi]
     vpsubd zmm4, zmm0, zmm2
 
-    vpcmpgtd k1, zmm0, zmm6
+    vpcmpgtd k1, zmm0, zmm5
     kmovd k3, k1
+    vmovdqu32 [r9], zmm5
 
     vpxord zmm7, zmm7, zmm7
     vpgatherdd zmm7{k3}, [rcx+zmm4*1]
@@ -53,6 +54,6 @@ avx_wavefront_extension_iteration:
     vpaddd zmm4, zmm2, zmm3
     vmovdqu32 [rsi], zmm4
 
-    vmovdqu32 [rdi], zmm12
+    vmovdqu32 [rdi], zmm0
 
     ret

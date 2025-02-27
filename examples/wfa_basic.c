@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
   attributes.affine_penalties.mismatch = 4;
   attributes.affine_penalties.gap_opening = 6;
   attributes.affine_penalties.gap_extension = 2;
-    attributes.alignment_form.span = alignment_endsfree;
+    attributes.alignment_form.span = alignment_end2end;
     attributes.memory_mode = wavefront_memory_ultralow;
 
     attributes.plot.enabled = 1;
@@ -61,21 +61,41 @@ int main(int argc, char* argv[]) {
     
   // Initialize Wavefront Aligner
   wavefront_aligner_t* const wf_aligner = wavefront_aligner_new(&attributes);
+
+  // Initialize bialigner attribute for bidrectional wavefront
+  // wavefront_plot_t* plot = wavefront_plot_new(attributes.distance_metric, strlen(pattern), strlen(text), &attributes.plot);
+  // wf_aligner->bialigner = wavefront_bialigner_new(&attributes, plot);
+    
   // Align
   wavefront_align(wf_aligner,pattern,strlen(pattern),text,strlen(text));
 
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    // Align
+    wavefront_align(wf_aligner, pattern, strlen(pattern), text, strlen(text));
+    int score = cigar_score_gap_affine(wf_aligner->cigar, &attributes.affine_penalties);
+
+    // Stop clock
+    clock_gettime(CLOCK_MONOTONIC, &end);
     
-  // fprintf(stderr,"WFA-Alignment returns score %d\n",wf_aligner->cigar->score);
+  fprintf(stderr,"WFA-Alignment returns score %d\n",wf_aligner->cigar->score);
 
   // Display alignment
-  // fprintf(stderr,"  PATTERN  %s\n",pattern);
-  // fprintf(stderr,"  TEXT     %s\n",text);
+  fprintf(stderr,"  PATTERN  %s\n",pattern);
+  fprintf(stderr,"  TEXT     %s\n",text);
   fprintf(stderr,"  SCORE (RE)COMPUTED %d\n",
        cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
-  // cigar_print_pretty(stderr,wf_aligner->cigar,
-  //     pattern,strlen(pattern),text,strlen(text));
+  cigar_print_pretty(stderr,wf_aligner->cigar,
+      pattern,strlen(pattern),text,strlen(text));
+
+     long long elapsed_time = (end.tv_sec - start.tv_sec) * 1e9 + (end.tv_nsec - start.tv_nsec);
     
-    
+    // printf("%d\n", cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
+
+    FILE *file = fopen("score.txt", "w");
+    fprintf(file, "%d %lld\n", score, elapsed_time);
+    fclose(file);
     
     // wavefront_plot_print(stderr, wf_aligner);
   // Free

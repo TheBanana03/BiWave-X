@@ -192,11 +192,11 @@ int main() {
     // make: *** [Makefile:90: tools/align_benchmark] Error 2
     
     if (/*system("bash build.sh") ||*/ 1) {
-        printf("|---------------------------------------------------------------------------------------|\n");
-        printf("|\t\t\t\tAverage Execution Time\t\t\t\t\t|\n");
-        printf("|-----------------------|-------------------------------|-------------------------------|\n");
-        printf("|              \t\t|\t       AVX      \t|\t     Original       \t|\n");
-        printf("|-----------------------|-------------------------------|-------------------------------|\n");
+        printf("|---------------------------------------------------------------------------------------------------------------|\n");
+        printf("|\t\t\t\t\t\tAverage Execution Time\t\t\t\t\t\t|\n");
+        printf("|-----------------------|-------------------------------|-------------------------------|-----------------------|\n");
+        printf("|              \t\t|\t       AVX      \t|\t     Original       \t|\tAvg. Score\t|\n");
+        printf("|-----------------------|-------------------------------|-------------------------------|-----------------------|\n");
         
         for (int k = 0; k < num_len; k++) {
             
@@ -210,10 +210,11 @@ int main() {
 
             total_time_per_len[0] = 0;
             average_time_per_len[0] = 0;
+            average_score_per_len[0] = 0;
 
             total_time_per_len[1] = 0;
             average_time_per_len[1] = 0;
-
+            average_score_per_len[1] = 0;
             
             for (int i = 0; i < num_seq; i++) {
                 int pattern_length = 150;
@@ -237,10 +238,12 @@ int main() {
                 total_time[0] = 0;
                 average_time[0] = 0;
                 time_taken[0] = 0;
+                total_score[0] = 0;
 
                 total_time[1] = 0;
                 average_time[1] = 0;
                 time_taken[1] = 0;
+                total_score[1] = 0;
 
                 for (int l = 0; l < num_text; l++) {
                     int target_text = rand() % total_text;
@@ -293,13 +296,14 @@ int main() {
     
                 free(pattern);
             }
-                
-            average_score_per_len[0] += average_score[0]/num_len;
-            average_score_per_len[1] += average_score[1]/num_len;
-            if (average_score_per_len[0] == average_score_per_len[1])
-                printf("| Text Length: %s\t|\t%.6fs (%lldns)\t|\t%.6fs (%lldns)\t|\t%f\t|\n", file_names[k], average_time_per_len[0]/1e9, average_time_per_len[0],  average_time_per_len[1]/1e9, average_time_per_len[1], average_score_per_len[0]);
+
+            average_time_per_len[0] = total_time_per_len[0]/num_len;
+            average_time_per_len[1] = total_time_per_len[1]/num_len;
+            average_score_per_len[0] = average_score[0]/num_len;
+            average_score_per_len[1] = average_score[1]/num_len;
+            printf("| Text Length: %s\t|\t%.6fs (%lldns)\t|\t%.6fs (%lldns)\t|\t%f\t|\n", file_names[k], average_time_per_len[0]/1e9, average_time_per_len[0],  average_time_per_len[1]/1e9, average_time_per_len[1], average_score_per_len[0]);
         }
-        printf("|-----------------------|-------------------------------|-------------------------------|\n");
+        printf("|-----------------------|-------------------------------|-------------------------------|-----------------------|\n");
     }
     
     return 0;

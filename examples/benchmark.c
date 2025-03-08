@@ -196,10 +196,20 @@ void execute_wfa_basic(char* pattern, char* text, bool avx, int* score, long lon
 void update_top_results(struct match best_matches[], struct match curr_match) {
     for (int i = 0; i < 5; i++) {
         if (curr_match.score > best_matches[i].score) {
-            for (int j = 5 - 1; j > i; j--) {
-                best_matches[j] = best_matches[j-1];
+            for (int k = 4; k > i; k--) {
+                if (best_matches[k].text != NULL)
+                    free(best_matches[k].text);
+                
+                best_matches[k] = best_matches[k-1];
+                
+                if (best_matches[k-1].text != NULL)
+                    best_matches[k].text = strdup(best_matches[k-1].text);
             }
+            if (best_matches[i].text != NULL)
+                free(best_matches[i].text);
+            
             best_matches[i] = curr_match;
+            best_matches[i].text = strdup(curr_match.text);
             break;
         }
     }
@@ -213,7 +223,7 @@ void write_output(const char* file_name, char* text, char* pattern, int text_ind
     const char* dir_name = "output";
 
     char full_path[256];
-    snprintf(full_path, sizeof(full_path), "%s/%s", dir_name, file_name);
+    snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_name);
 
     FILE* file = fopen(full_path, "a+");
     
@@ -342,6 +352,14 @@ int main() {
                 time_taken[1] = 0;
                 total_score[1] = 0;
 
+                for (int i = 0; i < 5; i++) {
+                    best_matches[i].score = -2147483648;
+                    best_matches[i].text = NULL;
+                    best_matches[i].text_index = 0;
+                    best_matches[i].time[0] = 0;
+                    best_matches[i].time[1] = 0;
+                }
+
                 for (int l = 0; l < num_text; l++) {
                     int target_text = l;
                     char* text = extract_sequence(ref_file, target_text);
@@ -383,29 +401,29 @@ int main() {
                         curr_match.time[1] = time_taken[1];
 
                         update_top_results(best_matches, curr_match);
-                        
-                        // write_output(file_names[k], text, pattern, target_text, target_line, time_taken, curr_score[0]);
-                        const char* dir_name = "output";
 
-                        char full_path[256];
-                        snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_names[k]);
-                        full_path[sizeof(full_path) - 1] = '\0';
+                        write_output(file_names[k], text, pattern, target_text, target_line, time_taken, curr_score[0]);
+                        // const char* dir_name = "output";
+
+                        // char full_path[256];
+                        // snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_names[k]);
+                        // full_path[sizeof(full_path) - 1] = '\0';
                     
-                        FILE* file = fopen(full_path, "a+");
+                        // FILE* file = fopen(full_path, "a+");
                         
-                        if (!file) {
-                            perror("Error opening file");
-                            exit(EXIT_FAILURE);
-                        }
+                        // if (!file) {
+                        //     perror("Error opening file");
+                        //     exit(EXIT_FAILURE);
+                        // }
+                        
+                        // fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", target_line, strlen(pattern), pattern);
+                        // fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n", target_text, strlen(text), text);
+                        // fprintf(file, "Execution Time (Original)\t: %lld ns\n", time_taken[1]);
+                        // fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", time_taken[0]);
+                        // fprintf(file, "Score: %d\n\n", curr_score[0]);
+                        // fprintf(file, "----------------------------\n\n");
                     
-                        fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", target_line, strlen(pattern), pattern);
-                        fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n", target_text, strlen(text), text);
-                        fprintf(file, "Execution Time (Original)\t: %lld ns\n", time_taken[1]);
-                        fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", time_taken[0]);
-                        fprintf(file, "Score: %d\n\n", curr_score[0]);
-                        fprintf(file, "----------------------------\n\n");
-                    
-                        fclose(file);
+                        // fclose(file);
                     }
 
                     free(text);
@@ -429,33 +447,32 @@ int main() {
                 snprintf(file_path, sizeof(file_path), "best_score/%s/%d", file_names[k], target_line);
                 clear_file(file_path);
                 for (int m = 0; m < 5; m++) {
-                    // write_output(file_path, best_matches[m].text, pattern, best_matches[m].text_index, 
-                    //             target_line, best_matches[m].time, best_matches[m].score);
+                    write_output(file_path, best_matches[m].text, pattern, best_matches[m].text_index, 
+                                target_line, best_matches[m].time, best_matches[m].score);
 
-                    
-                    const char* dir_name = "output";
+                    // const char* dir_name = "output";
 
-                    char full_path[256];
-                    snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_path);
-                    full_path[sizeof(full_path) - 1] = '\0';
+                    // char full_path[256];
+                    // snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_path);
+                    // full_path[sizeof(full_path) - 1] = '\0';
                 
-                    FILE* file = fopen(full_path, "a+");
+                    // FILE* file = fopen(full_path, "a+");
                     
-                    if (!file) {
-                        perror("Error opening file");
-                        exit(EXIT_FAILURE);
-                    }
+                    // if (!file) {
+                    //     perror("Error opening file");
+                    //     exit(EXIT_FAILURE);
+                    // }
                     
-                    fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", 
-                                    target_line, strlen(pattern), pattern);
-                    fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n",
-                                    best_matches[m].text_index, strlen(best_matches[m].text), best_matches[m].text);
-                    fprintf(file, "Execution Time (Original)\t: %lld ns\n", best_matches[m].time[1]);
-                    fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", best_matches[m].time[0]);
-                    fprintf(file, "Score: %d\n\n", best_matches[m].score);
-                    fprintf(file, "----------------------------\n\n");
+                    // fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", 
+                    //                 target_line, strlen(pattern), pattern);
+                    // fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n",
+                    //                 best_matches[m].text_index, strlen(best_matches[m].text), best_matches[m].text);
+                    // fprintf(file, "Execution Time (Original)\t: %lld ns\n", best_matches[m].time[1]);
+                    // fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", best_matches[m].time[0]);
+                    // fprintf(file, "Score: %d\n\n", best_matches[m].score);
+                    // fprintf(file, "----------------------------\n\n");
                     
-                    fclose(file);
+                    // fclose(file);
                 }
 
                 printf("Pattern %d finished.\n\n", i);

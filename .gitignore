@@ -42,6 +42,7 @@ tests/wfa.utest.log.correct
 tests/wfa.utest.log.mem
 tests/wfa.utest.log.time
 tests/*.alg
+examples/output/*.txt
 
 # Jupyter Notebook auto0generated files
 .ipynb_checkpoints/

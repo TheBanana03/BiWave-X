@@ -7,11 +7,39 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include <ctype.h>
+
 struct match {
-    int score = -2147483648;
+    int score;
     char* text;
-    long long time;
+    int text_index;
+    long long time[2];
 };
+
+void check_nonprintable(const char* str, const char* var_name) {
+    int has_nonprintable = 0;
+
+    printf("Checking %s:\n", var_name);
+    for (size_t i = 0; i < strlen(str); i++) {
+        unsigned char ch = (unsigned char)str[i];
+
+        // Check if character is printable
+        if (!isprint(ch)) {
+            if (!has_nonprintable) {
+                printf("Raw text before processing: \"%s\"\n", str);
+
+                printf("WARNING: Non-printable characters found in %s!\n", var_name);
+                has_nonprintable = 1;
+            }
+            printf("Index %zu: Char '%c' (HEX: %02X)\n", i, ch, ch);
+        }
+    }
+
+    if (!has_nonprintable) {
+        printf("%s is clean (all printable characters).\n", var_name);
+    }
+    printf("\n");
+}
 
 void generate_dna(char *sequence, int length) {
     const char bases[] = "ACGT";
@@ -83,7 +111,7 @@ char* extract_sequence(const char* filename, int target_line) {
             break;
         }
     }
-
+    
     fclose(file);
     if (line) {
         free(line);
@@ -171,8 +199,7 @@ void update_top_results(struct match best_matches[], struct match curr_match) {
             for (int j = 5 - 1; j > i; j--) {
                 best_matches[j] = best_matches[j-1];
             }
-            
-            best_results[i] = curr_match;
+            best_matches[i] = curr_match;
             break;
         }
     }
@@ -186,9 +213,9 @@ void write_output(const char* file_name, char* text, char* pattern, int text_ind
     const char* dir_name = "output";
 
     char full_path[256];
-    snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_name);
+    snprintf(full_path, sizeof(full_path), "%s/%s", dir_name, file_name);
 
-    FILE* file = fopen(full_path, "a");
+    FILE* file = fopen(full_path, "a+");
     
     if (!file) {
         perror("Error opening file");
@@ -230,9 +257,11 @@ int main() {
     struct match curr_match;
 
     for (int i = 0; i < 5; i++) {
-        results[i].score = -2147483648;
-        results[i].text = NULL;
-        results[i].time = 0;
+        best_matches[i].score = -2147483648;
+        best_matches[i].text = NULL;
+        best_matches[i].text_index = 0;
+        best_matches[i].time[0] = 0;
+        best_matches[i].time[1] = 0;
     }
 
     int total_score[2] = {0, 0};
@@ -253,7 +282,7 @@ int main() {
     srand(time(NULL));
 
     int total_text = count_sequences(ref_file);
-    int num_text = total_text;
+    int num_text = 10;
     if (total_text <= 0) {
         fprintf(stderr, "No sequences found in file.\n");
         return EXIT_FAILURE;
@@ -283,8 +312,6 @@ int main() {
             total_time_per_len[1] = 0;
             average_time_per_len[1] = 0;
             average_score_per_len[1] = 0;
-
-            best_score = -2147483648;
             
             for (int i = 0; i < num_seq; i++) {
                 int pattern_length = 150;
@@ -348,8 +375,37 @@ int main() {
                         }
                         total_score[0] += curr_score[0];
                         total_score[1] += curr_score[1];
-                        best_score = get_max_score(best_score, curr_score[0]);
-                        write_output(file_names[k], text, pattern, target_text, target_line, time_taken, curr_score[0]);
+                        
+                        curr_match.score = curr_score[0];
+                        curr_match.text = text;
+                        curr_match.text_index = target_text;
+                        curr_match.time[0] = time_taken[0];
+                        curr_match.time[1] = time_taken[1];
+
+                        update_top_results(best_matches, curr_match);
+                        
+                        // write_output(file_names[k], text, pattern, target_text, target_line, time_taken, curr_score[0]);
+                        const char* dir_name = "output";
+
+                        char full_path[256];
+                        snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_names[k]);
+                        full_path[sizeof(full_path) - 1] = '\0';
+                    
+                        FILE* file = fopen(full_path, "a+");
+                        
+                        if (!file) {
+                            perror("Error opening file");
+                            exit(EXIT_FAILURE);
+                        }
+                    
+                        fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", target_line, strlen(pattern), pattern);
+                        fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n", target_text, strlen(text), text);
+                        fprintf(file, "Execution Time (Original)\t: %lld ns\n", time_taken[1]);
+                        fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", time_taken[0]);
+                        fprintf(file, "Score: %d\n\n", curr_score[0]);
+                        fprintf(file, "----------------------------\n\n");
+                    
+                        fclose(file);
                     }
 
                     free(text);
@@ -368,7 +424,41 @@ int main() {
                 total_time_per_len[1] += average_time[1];
                 average_score[1] = (total_score[1]*1.0)/num_iters;
                 // printf("Average execution time: %.6fs (%lldns)\t%.6fs (%lldns)\n\n", average_time[0]/1e9, average_time[0], average_time[1]/1e9, average_time[1]);
-                printf("Pattern %d finished.\n", i);
+
+                char file_path[256];
+                snprintf(file_path, sizeof(file_path), "best_score/%s/%d", file_names[k], target_line);
+                clear_file(file_path);
+                for (int m = 0; m < 5; m++) {
+                    // write_output(file_path, best_matches[m].text, pattern, best_matches[m].text_index, 
+                    //             target_line, best_matches[m].time, best_matches[m].score);
+
+                    
+                    const char* dir_name = "output";
+
+                    char full_path[256];
+                    snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_path);
+                    full_path[sizeof(full_path) - 1] = '\0';
+                
+                    FILE* file = fopen(full_path, "a+");
+                    
+                    if (!file) {
+                        perror("Error opening file");
+                        exit(EXIT_FAILURE);
+                    }
+                    
+                    fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", 
+                                    target_line, strlen(pattern), pattern);
+                    fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n",
+                                    best_matches[m].text_index, strlen(best_matches[m].text), best_matches[m].text);
+                    fprintf(file, "Execution Time (Original)\t: %lld ns\n", best_matches[m].time[1]);
+                    fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", best_matches[m].time[0]);
+                    fprintf(file, "Score: %d\n\n", best_matches[m].score);
+                    fprintf(file, "----------------------------\n\n");
+                    
+                    fclose(file);
+                }
+
+                printf("Pattern %d finished.\n\n", i);
                 free(pattern);
             }
 

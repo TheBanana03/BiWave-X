@@ -335,7 +335,8 @@ int main() {
                 
                 // generate_dna(text, text_length);
                 
-                int target_line = rand() % total_seq;
+                // int target_line = rand() % total_seq;
+                int target_line = i;
                 char* pattern = extract_sequence(curr_file, target_line);
                 if (!pattern) {
                     fprintf(stderr, "Failed to get random pattern. Skipping...\n");
@@ -403,27 +404,6 @@ int main() {
                         update_top_results(best_matches, curr_match);
 
                         write_output(file_names[k], text, pattern, target_text, target_line, time_taken, curr_score[0]);
-                        // const char* dir_name = "output";
-
-                        // char full_path[256];
-                        // snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_names[k]);
-                        // full_path[sizeof(full_path) - 1] = '\0';
-                    
-                        // FILE* file = fopen(full_path, "a+");
-                        
-                        // if (!file) {
-                        //     perror("Error opening file");
-                        //     exit(EXIT_FAILURE);
-                        // }
-                        
-                        // fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", target_line, strlen(pattern), pattern);
-                        // fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n", target_text, strlen(text), text);
-                        // fprintf(file, "Execution Time (Original)\t: %lld ns\n", time_taken[1]);
-                        // fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", time_taken[0]);
-                        // fprintf(file, "Score: %d\n\n", curr_score[0]);
-                        // fprintf(file, "----------------------------\n\n");
-                    
-                        // fclose(file);
                     }
 
                     free(text);
@@ -449,30 +429,6 @@ int main() {
                 for (int m = 0; m < 5; m++) {
                     write_output(file_path, best_matches[m].text, pattern, best_matches[m].text_index, 
                                 target_line, best_matches[m].time, best_matches[m].score);
-
-                    // const char* dir_name = "output";
-
-                    // char full_path[256];
-                    // snprintf(full_path, sizeof(full_path), "%s/%s.txt", dir_name, file_path);
-                    // full_path[sizeof(full_path) - 1] = '\0';
-                
-                    // FILE* file = fopen(full_path, "a+");
-                    
-                    // if (!file) {
-                    //     perror("Error opening file");
-                    //     exit(EXIT_FAILURE);
-                    // }
-                    
-                    // fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", 
-                    //                 target_line, strlen(pattern), pattern);
-                    // fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n",
-                    //                 best_matches[m].text_index, strlen(best_matches[m].text), best_matches[m].text);
-                    // fprintf(file, "Execution Time (Original)\t: %lld ns\n", best_matches[m].time[1]);
-                    // fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", best_matches[m].time[0]);
-                    // fprintf(file, "Score: %d\n\n", best_matches[m].score);
-                    // fprintf(file, "----------------------------\n\n");
-                    
-                    // fclose(file);
                 }
 
                 printf("Pattern %d finished.\n\n", i);

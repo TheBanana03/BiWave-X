@@ -234,8 +234,8 @@ void write_output(const char* file_name, char* text, char* pattern, int text_ind
 
     fprintf(file, "Pattern\t[Sequence %04d] (Length %05ld): %s\n", pattern_index, strlen(pattern), pattern);
     fprintf(file, "Text\t[Sequence %04d] (Length %05ld): %s\n", text_index, strlen(text), text);
-    fprintf(file, "Execution Time (Original)\t: %lld ns\n", time[1]);
-    fprintf(file, "Execution Time (AVX)\t\t: %lld ns\n", time[0]);
+    fprintf(file, "Execution Time (Original)\t: %.4f ms\n", time[1]/1000000.0f);
+    fprintf(file, "Execution Time (AVX)\t\t: %.4f ms\n", time[0]/1000000.0f);
     fprintf(file, "Score: %d\n\n", score);
     fprintf(file, "----------------------------\n\n");
 

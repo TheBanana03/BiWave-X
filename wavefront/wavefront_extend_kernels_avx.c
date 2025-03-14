@@ -516,7 +516,7 @@ static bool executed = false;
 
     
       _mm512_storeu_si512((__m512*)&offsets[k],offsets_vector);
-    
+
     if(mask == 0) continue;
 
     int st  = __builtin_ctz(mask);

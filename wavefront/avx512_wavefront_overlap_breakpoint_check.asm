@@ -1,41 +1,41 @@
 section .text
 global avx512_wavefront_overlap_breakpoint_check
 
+
 avx512_wavefront_overlap_breakpoint_check:
-    ;             rdi         rsi         rdx          rcx       r8    r9      rsp+16           +24          +32
-    ; params: &k0_vector, &k1_vector,  &moffset_0, &moffset_1, tlen, plen, mwf_0->offsets, mwf_1->offsets, &mask1
-    vmovdqu32 zmm0, [rdi] ; k0_vector
+    ;             rdi         rsi         rdx    rcx      r8               r9         rsp+8
+    ; params: &k0_vector, &mask_indices,  tlen, plen, mwf_0->offsets, mwf_1->offsets, &mask1
+    vpxord zmm0, zmm0, zmm0
+    vmovdqa32 zmm0, [rdi] ; k0_vector
 
     ; WAVEFRONT_K_INVERSE(k,tlen,plen)  (tlen-plen-k)
-    mov eax, r8d  ; tlen
-    mov ebx, r9d  ; plen
-    mov ecx, eax
-    sub ecx, ebx
-    vpbroadcastd zmm2, ecx
-    vpbroadcastd zmm3, ebx
+    vpbroadcastd zmm8, edx
+    sub edx, ecx
+    vpbroadcastd zmm2, edx
+    vpbroadcastd zmm3, ecx
 
-    vsubpd zmm1, zmm2, zmm0 ; k1_vector values
-    ; vmovdqu32 [rsi], zmm1    prolly not needed outside, un-comment otherwise
+    vpsubd zmm1, zmm2, zmm0 ; k1_vector values
 
+    ;mov rax, [r8]
+    ;mov rbx, [r9]
 
-    ; Gather offsets at indices stored in zmm4
-    mov rax, [rsp+16]
-    mov rbx, [rsp+24]
-    vgatherdps zmm5, [rax+zmm0*4]  ; moffsets_0 vector
-    vgatherdps zmm6, [rbx+zmm1*4]  ; moffsets_1 vector
-    ; vmovdqu32 [rdx], zmm5   not needed outside
-    ; vmovdqu32 [rcx], zmm6
+    kmovd k1, [rsi]
+    kmovd k3, k1
+    vpxord zmm5, zmm5, zmm5
+    vpgatherdd zmm5 {k3}, [r8+zmm0*4]  ; moffsets_0 vector
+    vpxord zmm6, zmm6, zmm6
+    vpgatherdd zmm6 {k1}, [r9+zmm1*4]  ; moffsets_1 vector
 
-
-    ; Check (mh_0 + mh_1 >= text_length)  ;;  condition (score_0 + score_1 < breakpoint->score) is checked outside
-    ; #define WAVEFRONT_H(k,offset) => returns (offset)
-    ; therefore; mh_0 and mh_1 are just moffset_0 and moffset_1
+    ; Check (mh_0 + mh_1 >= text_length)
     vpaddd zmm7, zmm5, zmm6  ; mh0 + mh1
-    vpcmpgtd k1, zmm7, zmm2
+    ; vmovdqu32 [rdi], zmm0
+
+    vpcmpltd k2, zmm7, zmm8
+    knotd k2, k2
     
     ; pass the mask back
-    mov rax, [rsp+32]
-    kmovw eax, k1
-    mov [rax], eax
+    ; mov rax, [rsp+8]
+    ; kmovd [rsp+8], k2
+    kmovd [rsi], k2
 
     ret

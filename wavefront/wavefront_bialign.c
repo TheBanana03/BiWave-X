@@ -42,6 +42,10 @@
 #include "wavefront_plot.h"
 #include "wavefront_debug.h"
 
+// #include "wavefront_extend_kernels_avx.c"
+
+#include <immintrin.h>
+
 /*
  * Config
  */
@@ -50,9 +54,11 @@
 #define WF_BIALIGN_RECOVERY_MIN_SCORE  500
 
 #if __AVX512CD__ && __AVX512VL__
-#include <immintrin.h>
 
-extern void avx512_wavefront_overlap_breakpoint_check(__m512i*, __m512i*, __m512i*, __m512i*, int32_t, int32_t, int32_t*, int32_t*, __mmask16*);
+    extern void avx512_wavefront_overlap_breakpoint_check(__m512i*, __mmask16*, int32_t, int32_t, int32_t*, int32_t*);
+    // extern void avx512_wavefront_overlap_breakpoint_getk1(__m512i*, __m512i*, int, int);
+    // extern void avx512_wavefront_overlap_breakpoint_mask1(__m512i*, __m512i*, int, __mmask16*);
+    // extern void avx512_wavefront_overlap_breakpoint_mask2(int, int, int, __mmask16*);
 #endif
 
 /*
@@ -230,7 +236,7 @@ void wavefront_bialign_breakpoint_indel2indel(
     const int dh_1 = WAVEFRONT_H(k_1,doffset_1);
     // Check breakpoint d2d
     if (dh_0 + dh_1 >= text_length && score_0 + score_1 - gap_open < breakpoint->score) {
-      if (breakpoint_forward) {
+        if (breakpoint_forward) {
         // Check out-of-bounds coordinates
         const int v = WAVEFRONT_V(k_0,dh_0);
         const int h = WAVEFRONT_H(k_0,dh_0);
@@ -284,18 +290,22 @@ void wavefront_bialign_breakpoint_m2m(
   // Compute overlapping interval
   const int min_hi = MIN(hi_0,hi_1);
   const int max_lo = MAX(lo_0,lo_1);
+    // fprintf(stderr, "Lily: %d, %d\n", max_lo, min_hi);
   int k_0;
   for (k_0=max_lo;k_0<=min_hi;k_0++) {
+      // if (k_0==max_lo && max_lo > 1000)
+      // fprintf(stderr, "Lily: %d, %d\n", max_lo, min_hi);
     const int k_1 = WAVEFRONT_K_INVERSE(k_0,pattern_length,text_length);
     // Fetch offsets
     const wf_offset_t moffset_0 = mwf_0->offsets[k_0];
     const wf_offset_t moffset_1 = mwf_1->offsets[k_1];
     const int mh_0 = WAVEFRONT_H(k_0,moffset_0);
     const int mh_1 = WAVEFRONT_H(k_1,moffset_1);
-
+      
     // Check breakpoint m2m
     if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score) {
-      if (breakpoint_forward) {
+        // fprintf(stderr, "--Lily: %d, %d, %d\n", min_hi, k_0, max_lo);
+        if (breakpoint_forward) {
         breakpoint->score_forward = score_0;
         breakpoint->score_reverse = score_1;
         breakpoint->k_forward = k_0;
@@ -339,37 +349,66 @@ void wavefront_bialign_breakpoint_m2m_avx512(
   // Load wavefront boundaries
   const int lo_0 = mwf_0->lo;
   const int hi_0 = mwf_0->hi;
-  const int lo_1 = text_length - pattern_length - mwf_1->hi;
-  const int hi_1 = text_length - pattern_length - mwf_1->lo;
+  const int lo_1 = WAVEFRONT_K_INVERSE(mwf_1->hi,pattern_length,text_length);
+  const int hi_1 = WAVEFRONT_K_INVERSE(mwf_1->lo,pattern_length,text_length);
 
   // Check for non-overlapping regions
   if (hi_1 < lo_0 || hi_0 < lo_1) return;
-
-  // Compute overlapping interval
-  const int min_hi = (hi_0 < hi_1) ? hi_0 : hi_1;
-  const int max_lo = (lo_0 > lo_1) ? lo_0 : lo_1;
-
-  for (int k_0 = max_lo; k_0 <= min_hi; k_0 += 16) {
-    __m512i k0_vector = _mm512_set_epi32(
-        k_0+15, k_0+14, k_0+13, k_0+12, k_0+11, k_0+10, k_0+9, k_0+8,
-        k_0+7, k_0+6, k_0+5, k_0+4, k_0+3, k_0+2, k_0+1, k_0);
     
-    __m512i k1_vector, moffset_0, moffset_1;
-    __mmask16 mask1, mask2;
+  // Compute overlapping interval
+  const int min_hi = MIN(hi_0,hi_1);
+  const int max_lo = MAX(lo_0,lo_1);
+    // fprintf(stderr, "Lily: %d, %d\n", max_lo, min_hi);
+    int k_0;
+  for (k_0 = max_lo; k_0 <= min_hi; k_0 += 16) {
+      // if (k_0==max_lo && max_lo > 1000)
+      // fprintf(stderr, "Lily: %d, %d\n", max_lo, min_hi);
+    alignas(64) __m512i k0_vector;
+      __m512i k1_vector;
+      __mmask16 mask1;
+      __mmask16 mask2;
+      alignas(64) __mmask16 mask_indices;
 
-    avx512_wavefront_overlap_breakpoint_check(&k0_vector, &k1_vector, &moffset_0, &moffset_1, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets, &mask1);
+      mask1 = 0;
+      mask2 = 0;
+      
+      k0_vector = _mm512_set_epi32(
+        k_0, k_0+1, k_0+2, k_0+3, k_0+4, k_0+5, k_0+6, k_0+7,
+        k_0+8, k_0+9, k_0+10, k_0+11, k_0+12, k_0+13, k_0+14, k_0+15);
+      k1_vector = k0_vector;
+      
+    mask_indices = _mm512_cmple_epi32_mask(k0_vector, _mm512_set1_epi32(min_hi));
 
-    // mask2 condition
+//       fprintf(stderr, "-------\n");
+//       printf("Address of k0_vector: %p\n", (void*)&k0_vector);
+// printf("Address of mask_indices: %p\n", (void*)&mask_indices);
+      
+    avx512_wavefront_overlap_breakpoint_check(&k0_vector, &mask_indices, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets);
+      
     __m512i score_sum_vector = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
     mask2 = _mm512_cmplt_epi32_mask(score_sum_vector, _mm512_set1_epi32(breakpoint->score));
 
-
+      //   print_m512i(k0_vector);
+      //   print_m512i(k1_vector);
+      // fprintf(stderr, "-------\n");
+      // fprintf(stderr, "Mask1:");
+      // print_mask(mask1);
+      // fprintf(stderr, "Lily: %d\n", max_lo);
+    
+      // print_mask(tempmask);
+      
     // if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score)
-    __mmask16 final_mask = mask1 & mask2;
+    __mmask16 final_mask = mask_indices & mask2;
     if (_mm512_mask2int(final_mask)) {
-      int line = _tzcnt_u32(_mm512_mask2int(final_mask));
-      int final_k_0 = k_0 + line;
+      int line = _lzcnt_u32(_mm512_mask2int(final_mask)) - 16;
+      int final_k_0 = k_0 + line; //- max_lo;
       int final_k_1 = text_length - pattern_length - final_k_0;
+
+        // fprintf(stderr, "--Lily: %d, %d, %d, %d, %d\n", min_hi, final_k_0, max_lo, line, k_0);
+        // print_mask(mask_indices);
+        // print_mask(final_mask);
+        // print_m512i(k0_vector);
+        // print_m512i(k1_vector);
 
       if (breakpoint_forward) {
         breakpoint->score_forward = score_0;
@@ -386,11 +425,21 @@ void wavefront_bialign_breakpoint_m2m_avx512(
         breakpoint->offset_forward = mwf_1->offsets[final_k_1];
         breakpoint->offset_reverse = mwf_0->offsets[final_k_0];
       }
-
       breakpoint->score = score_0 + score_1;
       breakpoint->component = affine2p_matrix_M;
       return;
     }
+      // else {
+      //     for (int k=k_0;k<k_0+16;k++) {
+      //         const int k_1 = WAVEFRONT_K_INVERSE(k,pattern_length,text_length);
+      //           // Fetch offsets
+      //           const wf_offset_t moffset_0 = mwf_0->offsets[k];
+      //           const wf_offset_t moffset_1 = mwf_1->offsets[k_1];
+      //           const int mh_0 = WAVEFRONT_H(k_0,moffset_0);
+      //           const int mh_1 = WAVEFRONT_H(k_1,moffset_1);
+      //         if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score) {fprintf(stderr, "!!Lily: %d, %d, %d\n", k, k_0, max_lo);print_mask(mask_indices);print_mask(final_mask);print_mask(mask1);print_mask(mask2);print_m512i(k0_vector);fprintf(stderr, "tlen: %d\n", text_length);fprintf(stderr,"Vector Sum: ");for(int l=k_0;l<k_0+16;l++){fprintf(stderr, "%d,%d:%d(%d)[%d] ",l,WAVEFRONT_K_INVERSE(l, pattern_length,text_length),mwf_0->offsets[l]+mwf_1->offsets[WAVEFRONT_K_INVERSE(l, pattern_length,text_length)],mwf_0->offsets[l],mwf_1->offsets[WAVEFRONT_K_INVERSE(l, pattern_length,text_length)]);}fprintf(stderr, "\n");print_m512i(gathered);break;}
+      //     }
+      // }
   }
 }
 #endif
@@ -434,6 +483,7 @@ void wavefront_bialign_overlap(
     const int score_i = score_1 - i;
     if (score_i < 0) break;
     const int score_mod_i = score_i % max_score_scope;
+    // printf("%d %d %d\n", i, score_i, score_mod_i);
 
     // Check I2/D2-breakpoints (gap_affine_2p)
     if (distance_metric == gap_affine_2p) {
@@ -476,15 +526,15 @@ void wavefront_bialign_overlap(
     if (score_0 + score_i >= breakpoint->score) continue;
     wavefront_t* const mwf_1 = wf_aligner_1->wf_components.mwavefronts[score_mod_i];
     if (mwf_1 != NULL) {
-      // #if __AVX512CD__ && __AVX512VL__
-      //   wavefront_bialign_breakpoint_m2m_avx512(
-      //     wf_aligner_0,breakpoint_forward,
-      //     score_0,score_i,mwf_0,mwf_1,breakpoint);
-      // #else
+      #if __AVX512CD__ && __AVX512VL__
+        wavefront_bialign_breakpoint_m2m_avx512(
+          wf_aligner_0,breakpoint_forward,
+          score_0,score_i,mwf_0,mwf_1,breakpoint);
+      #else
         wavefront_bialign_breakpoint_m2m(
           wf_aligner_0,breakpoint_forward,
           score_0,score_i,mwf_0,mwf_1,breakpoint);
-      // #endif
+      #endif
     }
   }
 }

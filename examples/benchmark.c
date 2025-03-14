@@ -169,7 +169,7 @@ void execute_wfa_basic(char* pattern, char* text, bool avx, int* score, long lon
         perror("Fork failed");
         exit(EXIT_FAILURE);
     } else if (pid == 0) {
-        const char* wfa_path = avx ? "./wfa_basic" : "/home/jupyter-administrator/WFA/WFA2-lib/examples/wfa_basic";
+        const char* wfa_path = avx ? "./wfa_basic" : "/mnt/c/THS_Repo/wam/WFA2-lib/examples/wfa_basic";
         char *args[] = {(char*)wfa_path, (char*)pattern, (char*)text, NULL};
         // printf("%s, %s, %s", args[0], args[1], args[2]);
         execvp(args[0], args);
@@ -182,7 +182,7 @@ void execute_wfa_basic(char* pattern, char* text, bool avx, int* score, long lon
         int status;
         waitpid(pid, &status, 0);
 
-        const char* file_name = avx ? "./score.txt" : "/home/jupyter-administrator/WFA/WFA2-lib/examples/score.txt";
+        const char* file_name = avx ? "./score.txt" : "/mnt/c/THS_Repo/wam/WFA2-lib/examples/score.txt";
         read_metrics(file_name, score, time_taken);
         
         if (WIFEXITED(status)) {
@@ -292,7 +292,7 @@ int main() {
     srand(time(NULL));
 
     int total_text = count_sequences(ref_file);
-    int num_text = 10;
+    int num_text = total_text;
     if (total_text <= 0) {
         fprintf(stderr, "No sequences found in file.\n");
         return EXIT_FAILURE;

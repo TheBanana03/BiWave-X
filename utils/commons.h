@@ -60,6 +60,8 @@
 #include <assert.h>
 #include <signal.h>
 
+#include <stdalign.h>
+
 /*
  * Macro Utils (Stringify)
  */

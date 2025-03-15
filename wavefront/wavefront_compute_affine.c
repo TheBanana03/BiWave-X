@@ -54,6 +54,49 @@
 /*
  * Compute Kernels
  */
+// void wavefront_compute_affine_idm(
+//     wavefront_aligner_t* const wf_aligner,
+//     const wavefront_set_t* const wavefront_set,
+//     const int lo,
+//     const int hi) {
+//   // Parameters
+//   wavefront_sequences_t* const sequences = &wf_aligner->sequences;
+//   const int pattern_length = sequences->pattern_length;
+//   const int text_length = sequences->text_length;
+//   // In Offsets
+//   const wf_offset_t* const m_misms = wavefront_set->in_mwavefront_misms->offsets;
+//   const wf_offset_t* const m_open1 = wavefront_set->in_mwavefront_open1->offsets;
+//   const wf_offset_t* const i1_ext = wavefront_set->in_i1wavefront_ext->offsets;
+//   const wf_offset_t* const d1_ext = wavefront_set->in_d1wavefront_ext->offsets;
+//   // Out Offsets
+//   wf_offset_t* const out_m = wavefront_set->out_mwavefront->offsets;
+//   wf_offset_t* const out_i1 = wavefront_set->out_i1wavefront->offsets;
+//   wf_offset_t* const out_d1 = wavefront_set->out_d1wavefront->offsets;
+//   // Compute-Next kernel loop
+//   int k;
+//   PRAGMA_LOOP_VECTORIZE
+//   for (k=lo;k<=hi;++k) {
+//     // Update I1
+//     const wf_offset_t ins1_o = m_open1[k-1];
+//     const wf_offset_t ins1_e = i1_ext[k-1];
+//     const wf_offset_t ins1 = MAX(ins1_o,ins1_e) + 1;
+//     out_i1[k] = ins1;
+//     // Update D1
+//     const wf_offset_t del1_o = m_open1[k+1];
+//     const wf_offset_t del1_e = d1_ext[k+1];
+//     const wf_offset_t del1 = MAX(del1_o,del1_e);
+//     out_d1[k] = del1;
+//     // Update Mwavefron
+//     const wf_offset_t misms = m_misms[k] + 1;
+//     wf_offset_t max = MAX(del1,MAX(misms,ins1));
+//     // Adjust offset out of boundaries !(h>tlen,v>plen) (here to allow vectorization)
+//     const wf_unsigned_offset_t h = WAVEFRONT_H(k,max); // Make unsigned to avoid checking negative
+//     const wf_unsigned_offset_t v = WAVEFRONT_V(k,max); // Make unsigned to avoid checking negative
+//     if (h > text_length) max = WAVEFRONT_OFFSET_NULL;
+//     if (v > pattern_length) max = WAVEFRONT_OFFSET_NULL;
+//     out_m[k] = max;
+//   }
+// }
 void wavefront_compute_affine_idm(
     wavefront_aligner_t* const wf_aligner,
     const wavefront_set_t* const wavefront_set,

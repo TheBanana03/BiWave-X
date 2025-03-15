@@ -292,7 +292,7 @@ int main() {
     srand(time(NULL));
 
     int total_text = count_sequences(ref_file);
-    int num_text = total_text;
+    int num_text = 50;
     if (total_text <= 0) {
         fprintf(stderr, "No sequences found in file.\n");
         return EXIT_FAILURE;

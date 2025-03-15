@@ -363,7 +363,7 @@ void wavefront_bialign_breakpoint_m2m_avx512(
   for (k_0 = max_lo; k_0 <= min_hi; k_0 += 16) {
       // if (k_0==max_lo && max_lo > 1000)
       // fprintf(stderr, "Lily: %d, %d\n", max_lo, min_hi);
-    alignas(64) __m512i k0_vector;
+      alignas(64) __m512i k0_vector;
       __m512i k1_vector;
       __mmask16 mask1;
       __mmask16 mask2;
@@ -444,7 +444,7 @@ void wavefront_bialign_breakpoint_m2m_avx512(
 }
 #endif
 
-/* _________________________________________________________________________________________________
+/* _________________________________________________________________________________________________*/
 
 
 /*
@@ -527,9 +527,9 @@ void wavefront_bialign_overlap(
     wavefront_t* const mwf_1 = wf_aligner_1->wf_components.mwavefronts[score_mod_i];
     if (mwf_1 != NULL) {
       #if __AVX512CD__ && __AVX512VL__
-        wavefront_bialign_breakpoint_m2m_avx512(
-          wf_aligner_0,breakpoint_forward,
-          score_0,score_i,mwf_0,mwf_1,breakpoint);
+         wavefront_bialign_breakpoint_m2m_avx512(
+           wf_aligner_0,breakpoint_forward,
+           score_0,score_i,mwf_0,mwf_1,breakpoint);
       #else
         wavefront_bialign_breakpoint_m2m(
           wf_aligner_0,breakpoint_forward,

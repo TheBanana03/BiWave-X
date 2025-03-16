@@ -43,6 +43,11 @@ tests/wfa.utest.log.mem
 tests/wfa.utest.log.time
 tests/*.alg
 examples/output/*.txt
+examples/output/best_score/150/
+examples/output/best_score/300/
+examples/output/best_score/500/
+examples/output/best_score/750/
+examples/output/best_score/1000/
 
 # Jupyter Notebook auto0generated files
 .ipynb_checkpoints/

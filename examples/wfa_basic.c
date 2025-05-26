@@ -89,8 +89,11 @@ int main(int argc, char* argv[]) {
     
     // printf("%d\n", cigar_score_gap_affine(wf_aligner->cigar,&attributes.affine_penalties));
 
-    FILE *file = fopen("score.txt", "w");
+    FILE *file = fopen("/home/jupyter-administrator/WFA2-lib/examples/score.txt", "w");
     fprintf(file, "%d %lld\n", score, elapsed_time);
+    cigar_print_pretty(file,wf_aligner->cigar,
+          pattern,strlen(pattern),text,strlen(text));
+    fflush(file);
     fclose(file);
     
     // wavefront_plot_print(stderr, wf_aligner);

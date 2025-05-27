@@ -16,9 +16,6 @@ avx512_wavefront_overlap_breakpoint_check:
 
     vpsubd zmm1, zmm2, zmm0 ; k1_vector values
 
-    ;mov rax, [r8]
-    ;mov rbx, [r9]
-
     kmovd k1, [rsi]
     kmovd k3, k1
     vpxord zmm5, zmm5, zmm5
@@ -28,14 +25,11 @@ avx512_wavefront_overlap_breakpoint_check:
 
     ; Check (mh_0 + mh_1 >= text_length)
     vpaddd zmm7, zmm5, zmm6  ; mh0 + mh1
-    ; vmovdqu32 [rdi], zmm0
 
     vpcmpltd k2, zmm7, zmm8
     knotd k2, k2
     
     ; pass the mask back
-    ; mov rax, [rsp+8]
-    ; kmovd [rsp+8], k2
     kmovd [rsi], k2
 
     ret

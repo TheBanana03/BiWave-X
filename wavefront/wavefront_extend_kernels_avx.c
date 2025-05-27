@@ -478,7 +478,9 @@ static bool executed = false;
       k_min+15,k_min+14,k_min+13,k_min+12,k_min+11,k_min+10,k_min+9,k_min+8,
       k_min+7,k_min+6,k_min+5,k_min+4,k_min+3,k_min+2,k_min+1,k_min);
 
+    // Maybe adapt this entire loop so that vecshuffle is only initialized once?
   for (k=k_min; k<=k_max; k+=elems_per_register) {
+      // Maybe can get away with removing this line if aligned is done?
       __m512i offsets_vector = _mm512_loadu_si512 ((__m512i*)&offsets[k]);
       
       // __m512i test_offsets_vector = offsets_vector;
@@ -519,19 +521,55 @@ static bool executed = false;
 
     if(mask == 0) continue;
 
-    int st  = __builtin_ctz(mask);
-    int en =__builtin_clz(mask)-16;
+      // en = st - 16
+    // int st  = __builtin_ctz(mask);
+    // int en =__builtin_clz(mask)-16;
+    //   if (en < 0) printf("Lily\n");
 
-    for (int i=st; i<16-en; i++){
-      if (((mask >> i) & 1) == 0) continue;
-      const int curr_k = k + i;
-      const wf_offset_t offset = offsets[curr_k];
-      if (offset >= 0) {
-        offsets[curr_k] = wavefront_extend_matches_packed_kernel(wf_aligner,curr_k,offset);
-      } else {
-        offsets[curr_k] = WAVEFRONT_OFFSET_NULL;
-      }
-    }
+    //   // This might be vectorizable? Unravel the loop?
+    // for (int i=st; i<16-en; i++){
+    //   if (((mask >> i) & 1) == 0) continue; // Checks if bit at position i is 1 or 0, run the rest if 1, do nothing if 0, can just use mask itself
+    //   const int curr_k = k + i; // curr_k can be a mask that movs from k to k+16 based on prev mask instead?
+    //   const wf_offset_t offset = offsets[curr_k]; // masked mov from offsets
+    //   if (offset >= 0) {
+    //     offsets[curr_k] = wavefront_extend_matches_packed_kernel(wf_aligner,curr_k,offset); // function call? Might not be vectorizable
+    //   } else {
+    //     offsets[curr_k] = WAVEFRONT_OFFSET_NULL; // masked mov to offsets, just set null if negative
+    //   }
+    // }
+
+      // load st + 1...16 into vec i
+      // perform masked add on k and i using "mask", output is curr_k
+      // masked gather offsets with curr_k using "mask", output is offset
+      // make mask based on if offset is negative
+      // perform masked mov using mask from prev line
+      // sequentially call func for the rest of offset
+      __m512i idx_vec = _mm512_set_epi32(15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0);
+    __m512i k_vec   = _mm512_set1_epi32(k);
+    __m512i curr_k  = _mm512_add_epi32(idx_vec, k_vec);
+      __m512i offsets_vec = _mm512_mask_i32gather_epi32(_mm512_setzero_si512(), mask, curr_k, offsets, 4);
+      __mmask16 neg_mask = _mm512_cmp_epi32_mask(offsets_vec, _mm512_setzero_si512(), _MM_CMPINT_LT);
+        __mmask16 pos_mask = mask & ~neg_mask;
+        __m512i null_val = _mm512_set1_epi32(WAVEFRONT_OFFSET_NULL);
+        _mm512_mask_i32scatter_epi32(offsets, mask & neg_mask, curr_k, null_val, 4);
+      int compressed_curr_k[16];
+        int compressed_offset[16];
+        
+        // Store only the active `curr_k_arr` and `offset_arr` lanes
+        _mm512_mask_compressstoreu_epi32(compressed_curr_k, pos_mask, curr_k);
+        _mm512_mask_compressstoreu_epi32(compressed_offset, pos_mask, offsets_vec);
+        
+        // Count active lanes
+        int num_active = _mm_popcnt_u32(pos_mask);
+        
+        // Now loop only over the active elements
+        for (int i = 0; i < num_active; ++i) {
+          const int k_i = compressed_curr_k[i];
+          const int offset_i = compressed_offset[i];
+          offsets[k_i] = (offset_i >= 0)
+            ? wavefront_extend_matches_packed_kernel(wf_aligner, k_i, offset_i)
+            : WAVEFRONT_OFFSET_NULL;
+        }
   }
 }
 

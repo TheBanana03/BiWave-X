@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "wavefront_extend_kernels_avx.h": "c"
+        "wavefront_extend_kernels_avx.h": "c",
+        "wavefront_slab.h": "c"
     }
 }

@@ -181,7 +181,7 @@ void mm_allocator_clear(
   }
   mm_allocator->current_segment_idx = 0;
   // Clear malloc memory
-  VECTOR_ITERATE(mm_allocator->malloc_requests,malloc_request,m,mm_malloc_request_t) {
+  VECTOR_ITERATE(mm_allocator->malloc_requests, malloc_request, m, mm_malloc_request_t) {
     if (malloc_request->size > 0) free(malloc_request->mem); // Free malloc requests
   }
   vector_clear(mm_allocator->malloc_requests);

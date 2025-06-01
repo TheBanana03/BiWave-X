@@ -478,7 +478,7 @@ void wavefront_bialign_overlap(
   }
   // Traverse all scores-1
   int i;
-  for (i=0;i<max_score_scope;++i) {
+  for (i=0;i<max_score_scope;++i) { 
     // Compute score
     const int score_i = score_1 - i;
     if (score_i < 0) break;
@@ -491,7 +491,7 @@ void wavefront_bialign_overlap(
       // Check breakpoint d2d
       wavefront_t* const d2wf_1 = wf_aligner_1->wf_components.d2wavefronts[score_mod_i];
       if (d2wf_0 != NULL && d2wf_1 != NULL) {
-        wavefront_bialign_breakpoint_indel2indel(
+        wavefront_bialign_breakpoint_indel2indel( 
             wf_aligner_0,breakpoint_forward,score_0,score_i,
             d2wf_0,d2wf_1,affine2p_matrix_D2,breakpoint);
       }
@@ -601,7 +601,7 @@ int wavefront_bialign_find_breakpoint(
   bool last_wf_forward = false;
   while (true) {
     // Check close-to-collision
-    if (forward_max_ak + reverse_max_ak >= max_antidiagonal) break;
+    if (forward_max_ak + reverse_max_ak >= max_antidiagonal) break; 
     /*
      * Compute next wavefront (Forward)
      */
@@ -630,7 +630,7 @@ int wavefront_bialign_find_breakpoint(
     if (score_reverse + score_forward >= max_alignment_steps) return WF_STATUS_MAX_STEPS_REACHED;
     // DEBUG
     if (verbose >= 3 && score_forward % system->probe_interval_global == 0) {
-      wavefront_unialign_print_status(stderr,wf_forward,score_forward);
+      wavefront_unialign_print_status(stderr,wf_forward,score_forward); 
     }
   }
   // Advance until overlap is found

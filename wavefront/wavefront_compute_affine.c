@@ -97,6 +97,23 @@
 //     out_m[k] = max;
 //   }
 // }
+
+void print_alignment_offset(const void* ptr) {
+    uintptr_t addr = (uintptr_t)ptr;
+    size_t alignment = 64;
+    size_t offset = addr % alignment;
+
+    printf("Pointer: %p\n", ptr);
+    printf("Current alignment offset: %zu bytes\n", offset);
+
+    if (offset == 0) {
+        printf("✅ Properly aligned to %zu bytes\n", alignment);
+    } else {
+        printf("❌ Misaligned by %zu bytes (needs %zu more bytes for alignment)\n",
+               offset, alignment - offset);
+    }
+}
+
 void wavefront_compute_affine_idm(
     wavefront_aligner_t* const wf_aligner,
     const wavefront_set_t* const wavefront_set,
@@ -114,7 +131,7 @@ void wavefront_compute_affine_idm(
   const wf_offset_t* const d1_ext = wavefront_set->in_d1wavefront_ext->offsets;
   // Out Offsets [Reassignment of Values]
   wf_offset_t* const out_m = wavefront_set->out_mwavefront->offsets;
-  wf_offset_t* const out_i1 = wavefront_set->out_i1wavefront->offsets;
+  wf_offset_t* const out_i1  = wavefront_set->out_i1wavefront->offsets;
   wf_offset_t* const out_d1 = wavefront_set->out_d1wavefront->offsets;
   // Compute-Next kernel loop
   //self note: So far from what I can tell, what I can technically do is to get the MAX() of different DP Matrices from different k's (diagonals)
@@ -166,6 +183,8 @@ void wavefront_compute_affine_idm(
   }
   
   //AVX512 NEXT-kernel loop
+  //initialize temp holder
+  //__m512i* offsetPtr = aligned_alloc(64, sizeof(__m512i));
   if(num_of_diagonals < elems_per_reg) return;
 
   k_min += loop_peeling_iters;//skip the already handled elements
@@ -176,9 +195,14 @@ void wavefront_compute_affine_idm(
       k_min+7,k_min+6,k_min+5,k_min+4,k_min+3,k_min+2,k_min+1,k_min); 
 
   for (k=k_min; k <= k_max; k+=elems_per_reg) {
-
+    //input vectors
       __m512i ins1_o = _mm512_loadu_si512((__m512i*)&m_open1[k-1]); //self note: wf_offset_t is equivalent to signed int32
       __m512i ins1_e = _mm512_loadu_si512((__m512i*)&i1_ext[k-1]);
+
+    // _mm512_store_epi32(offsetPtr, ins1_o);
+    // print_alignment_offset(&m_open1[k-1]);
+    // fprintf(stderr, "Offsetptr");
+    // print_alignment_offset(offsetPtr);
 
       //const wf_offset_t del1;
       __m512i del1_o = _mm512_loadu_si512((__m512i*)&m_open1[k+1]);
@@ -188,16 +212,27 @@ void wavefront_compute_affine_idm(
 
       __m512i max;
 
-      //checker
-      //Offsets before iterations
-      __m512i offset;
+      // //Output Vectors
+      // __m512i m_out = _mm512_loadu_si512((__m512i*)&out_m[k]);
+      // __m512i i1_out = _mm512_loadu_si512((__m512i*)&out_i1[k]);
+      // __m512i d1_out = _mm512_loadu_si512((__m512i*)&out_d1[k]);
       //int length of pattern and text may cause errors
+      // print_alignment_offset(&ins1_o);
+      // print_m512i(ins1_o);
 
+      // //Output vectors ver
+      // avx512_wavefront_next_iter1(&ins1_o, &ins1_e, &i1_out, &del1_o, &del1_e, &d1_out);
+      // avx512_wavefront_next_iter2(&misms, &i1_out, &d1_out, &max);
+      // avx512_wavefront_next_iter3(&max, &m_out, &ks, &text_length, &pattern_length);
+
+      //Direct ver
       avx512_wavefront_next_iter1(&ins1_o, &ins1_e, (__m512i*)&out_i1[k], &del1_o, &del1_e, (__m512i*)&out_d1[k]);
-
       avx512_wavefront_next_iter2(&misms, (__m512i*)&out_i1[k], (__m512i*)&out_d1[k], &max);
-      //pattern checks
       avx512_wavefront_next_iter3(&max, (__m512i*)&out_m[k], &ks, &text_length, &pattern_length);
+ 
+      // _mm512_storeu_si512((__m512*)&out_m[k], m_out);
+      // _mm512_storeu_si512((__m512*)&out_i1[k], i1_out);
+      // _mm512_storeu_si512((__m512*)&out_d1[k], d1_out);
       
   }
 }

@@ -212,27 +212,27 @@ void wavefront_compute_affine_idm(
 
       __m512i max;
 
-      // //Output Vectors
-      // __m512i m_out = _mm512_loadu_si512((__m512i*)&out_m[k]);
-      // __m512i i1_out = _mm512_loadu_si512((__m512i*)&out_i1[k]);
-      // __m512i d1_out = _mm512_loadu_si512((__m512i*)&out_d1[k]);
+      //Output Vectors
+      __m512i m_out = _mm512_loadu_si512((__m512i*)&out_m[k]);
+      __m512i i1_out = _mm512_loadu_si512((__m512i*)&out_i1[k]);
+      __m512i d1_out = _mm512_loadu_si512((__m512i*)&out_d1[k]);
       //int length of pattern and text may cause errors
       // print_alignment_offset(&ins1_o);
       // print_m512i(ins1_o);
 
-      // //Output vectors ver
-      // avx512_wavefront_next_iter1(&ins1_o, &ins1_e, &i1_out, &del1_o, &del1_e, &d1_out);
-      // avx512_wavefront_next_iter2(&misms, &i1_out, &d1_out, &max);
-      // avx512_wavefront_next_iter3(&max, &m_out, &ks, &text_length, &pattern_length);
+      //Output vectors ver
+      avx512_wavefront_next_iter1(&ins1_o, &ins1_e, &i1_out, &del1_o, &del1_e, &d1_out);
+      avx512_wavefront_next_iter2(&misms, &i1_out, &d1_out, &max);
+      avx512_wavefront_next_iter3(&max, &m_out, &ks, &text_length, &pattern_length);
 
       //Direct ver
-      avx512_wavefront_next_iter1(&ins1_o, &ins1_e, (__m512i*)&out_i1[k], &del1_o, &del1_e, (__m512i*)&out_d1[k]);
-      avx512_wavefront_next_iter2(&misms, (__m512i*)&out_i1[k], (__m512i*)&out_d1[k], &max);
-      avx512_wavefront_next_iter3(&max, (__m512i*)&out_m[k], &ks, &text_length, &pattern_length);
+      // avx512_wavefront_next_iter1(&ins1_o, &ins1_e, (__m512i*)&out_i1[k], &del1_o, &del1_e, (__m512i*)&out_d1[k]);
+      // avx512_wavefront_next_iter2(&misms, (__m512i*)&out_i1[k], (__m512i*)&out_d1[k], &max);
+      // avx512_wavefront_next_iter3(&max, (__m512i*)&out_m[k], &ks, &text_length, &pattern_length);
  
-      // _mm512_storeu_si512((__m512*)&out_m[k], m_out);
-      // _mm512_storeu_si512((__m512*)&out_i1[k], i1_out);
-      // _mm512_storeu_si512((__m512*)&out_d1[k], d1_out);
+      _mm512_storeu_si512((__m512*)&out_m[k], m_out);
+      _mm512_storeu_si512((__m512*)&out_i1[k], i1_out);
+      _mm512_storeu_si512((__m512*)&out_d1[k], d1_out);
       
   }
 }

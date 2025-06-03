@@ -466,7 +466,7 @@ void wavefront_bialign_breakpoint_m2m_avx512(
     //     }
     //   }
     // }
-    __mmask16 final_mask = mask_indices & score_mask;
+    __mmask16 final_mask = bp_found_mask & score_mask;
     if (_mm512_mask2int(final_mask)) {
       int line = _lzcnt_u32(_mm512_mask2int(final_mask)) - 16;
       int final_k_0 = k_0 + line; //- max_lo;

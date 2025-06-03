@@ -50,6 +50,7 @@ void generate_dna(char *sequence, int length) {
 }
 
 int count_sequences(const char* filename) {
+
     FILE *file = fopen(filename, "r");
     
     if (!file) {
@@ -64,6 +65,30 @@ int count_sequences(const char* filename) {
 
     while ((read = getline(&line, &len, file)) != -1) {
         if (line[0] == '>')
+            count++;
+    }
+
+    free(line);
+    fclose(file);
+    return count;
+}
+
+int count_sequences_modded(const char* filename) {
+
+    FILE *file = fopen(filename, "r");
+    
+    if (!file) {
+        perror("Error opening file");
+        return -1;
+    }
+    
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t read;
+    int count = 0;
+
+    while ((read = getline(&line, &len, file)) != -1) {
+        if (strlen(line) > 0)
             count++;
     }
 
@@ -109,6 +134,39 @@ char* extract_sequence(const char* filename, int target_line) {
 
             sequence = strdup(seq_start);
             break;
+        }
+    }
+    
+    fclose(file);
+    if (line) {
+        free(line);
+    }
+    return sequence;
+}
+
+char* extract_sequence_modded(const char* filename, int target_line) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        perror("Error opening file");
+        return NULL;
+    }
+
+    int curr_line = 0;
+    char* line = NULL;
+    char* sequence = NULL;
+    size_t len = 0;
+    ssize_t read;
+ 
+    while ((read = getline(&line, &len, file)) != -1) {
+        if (curr_line == target_line) {
+            if (read > 0 && line[read - 1] == '\n') {
+                line[read - 1] = '\0';
+            }
+            //no more parsing
+            sequence = strdup(line);
+            break;
+        } else {
+            curr_line++;
         }
     }
     
@@ -182,7 +240,7 @@ void execute_wfa_basic(char* pattern, char* text, bool avx, int* score, long lon
         int status;
         waitpid(pid, &status, 0);
 
-        const char* file_name = avx ? "./score.txt" : "/mnt/c/THS_Repo/wam/WFA2-lib/examples/score.txt";
+        const char* file_name = avx ? "/home/retraxius/avx/score.txt" : "/home/retraxius/orig/score.txt";
         read_metrics(file_name, score, time_taken);
         
         if (WIFEXITED(status)) {
@@ -190,6 +248,48 @@ void execute_wfa_basic(char* pattern, char* text, bool avx, int* score, long lon
         } else {
             fprintf(stderr, "wfa_basic terminated abnormally\n");
         }
+    }
+}
+
+void execute_wfa_basic_modded(char* pattern, char* text, bool avx, int* score, long long* time_taken) {
+    pid_t pid = fork();
+    
+    if (pid < 0) {
+        perror("Fork failed");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
+        const char* wfa_path = avx ? "/mnt/c/THS_Repo/WFA2-lib/examples/wfa_basic" : "/mnt/c/THS_Repo/wam/WFA2-lib/examples/wfa_basic";
+        char *args[] = {(char*)wfa_path, NULL};
+        // printf("%s, %s, %s", args[0], args[1], args[2]);
+        execvp(args[0], args);
+        
+        // If execlp fails, print error and exit child process
+        perror("execvp failed");
+        exit(EXIT_FAILURE);
+    } else {
+        // Parent process: Wait for child to complete
+        int status;
+        waitpid(pid, &status, 0);
+
+        const char* file_name = avx ? "/home/retraxius/avx/score.txt" : "/home/retraxius/orig/score.txt";
+        read_metrics(file_name, score, time_taken);
+        
+        if (WIFEXITED(status)) {
+            // printf("wfa_basic exited with status %d\n", WEXITSTATUS(status));
+        } else {
+            fprintf(stderr, "wfa_basic terminated abnormally\n");
+        }
+    }
+}
+
+void write_inputfile(char* sequence, const char* filename) {
+    FILE* file = fopen(filename, "w");
+    if (!file)
+    {
+        fprintf(stderr, "Error opening %s", filename);
+    } else {
+        fprintf(file, "%s\n", sequence);
+        fclose(file);
     }
 }
 
@@ -258,7 +358,24 @@ void clear_file(const char* file_name) {
     fclose(file);
 }
 
+void clear_file_modded(const char* file_name) {
+    const char* dir_name = "output";
+
+    char full_path[256];
+    snprintf(full_path, sizeof(full_path), "/home/retraxius/%s/%s.txt", dir_name, file_name);
+
+    FILE* file = fopen(full_path, "w");
+
+    if (!file) {
+        perror("Error opening file for clearing");
+        exit(EXIT_FAILURE);
+    }
+
+    fclose(file);
+}
+
 int main() {
+    bool longCase = true;
     int num_iters = 1;
     int num_seq = 5;
     
@@ -286,13 +403,13 @@ int main() {
 
     int num_len = 5;
     const char* file_names[] = {"150", "300", "500", "750", "1000"};
-    const char* ref_file = "./test_cases/UNIPROT_DNA_ALL.fasta.txt";
-    char curr_file[50];
+    const char* ref_file = "/mnt/c/THS_Repo/WFA2-lib/examples/test_cases/UNIPROT_DNA_ALL.fasta.txt";
+    const char* ref_file_l = "/mnt/c/THS_Repo/WFA2-lib/examples/test_cases/longSplits/xaa.txt";
+    char curr_file[100];
     
     srand(time(NULL));
-
-    int total_text = count_sequences(ref_file);
-    int num_text = 50;
+    int total_text = count_sequences_modded(ref_file_l);
+    int num_text = 10;
     if (total_text <= 0) {
         fprintf(stderr, "No sequences found in file.\n");
         return EXIT_FAILURE;
@@ -304,7 +421,104 @@ int main() {
     // make: *** [Makefile:90: tools/align_benchmark] Error 2
     
     if (/*system("bash build.sh") ||*/ 1) {
-        for (int k = 0; k < num_len; k++) {
+        if (longCase)
+        {
+            //only interact with single file
+            snprintf(curr_file, sizeof(curr_file), "%s",ref_file_l);
+            clear_file_modded("long");
+
+            int total_seq = count_sequences_modded(curr_file);
+            if (total_seq <= 0) {
+                fprintf(stderr, "No sequences found in file. \n");
+                return EXIT_FAILURE;
+            }
+            total_time_per_len[0] = 0;
+            average_time_per_len[0] = 0;
+            average_score_per_len[0] = 0;
+
+            total_time_per_len[1] = 0;
+            average_time_per_len[1] = 0;
+            average_score_per_len[1] = 0;
+
+            for (int z = 0; z < num_seq; z++)
+            {
+                //2 sequences per loop
+                int target_pattern = z;
+                char* pattern = extract_sequence_modded(curr_file, z);
+
+                if (!pattern) {
+                    fprintf(stderr, "Failed to get pattern Skipping...\n");
+                    continue;
+                }
+
+                z++;
+                int target_text = z;
+                char* text = extract_sequence_modded(curr_file, z);
+                if (!pattern) {
+                    fprintf(stderr, "Failed to get text. Skipping...\n");
+                    free(pattern);
+                    continue;
+                }
+                fprintf(stderr, "Pattern length: %d", strlen(pattern));
+                fprintf(stderr, "Text length: %d", strlen(text));
+
+                total_time[0] = 0;
+                average_time[0] = 0;
+                time_taken[0] = 0;
+                total_score[0] = 0;
+
+                total_time[1] = 0;
+                average_time[1] = 0;
+                time_taken[1] = 0;
+                total_score[1] = 0;
+
+                for (int p = 0; p < 5; p++) {
+                    best_matches[p].score = -2147483648;
+                    best_matches[p].text = NULL;
+                    best_matches[p].text_index = 0;
+                    best_matches[p].time[0] = 0;
+                    best_matches[p].time[1] = 0;
+                }
+                //write input files
+                write_inputfile(pattern, "/home/retraxius/inputs/input1.txt");
+                write_inputfile(text, "/home/retraxius/inputs/input2.txt");
+                // Test avx
+                execute_wfa_basic_modded(pattern, text, true, &curr_score[0], &time_taken[0]);
+                total_time[0] += time_taken[0];
+                // printf("Iteration (A) %d: Time taken = %.6fs (%lldns)\t", j+1, time_taken[0]/1e9, time_taken[0]);
+
+                // Test original
+                execute_wfa_basic_modded(pattern, text, false, &curr_score[1], &time_taken[1]);
+                total_time[1] += time_taken[1];
+                // printf("Iteration (O) %d: Time taken = %.6fs (%lldns)\n", j+1, time_taken[1]/1e9, time_taken[1]);
+
+                if (curr_score[0] != curr_score[1]) {
+                    printf("Error: Differing scores detected.\n");
+                    print_sequences(pattern, text, target_pattern, target_text);
+                    printf("AVX Score: %d\tOriginal Score: %d\n", curr_score[0], curr_score[1]);
+                    printf("Exiting...\n");
+                    free(pattern);
+                    free(text);
+                    return 1;
+                }
+                total_score[0] += curr_score[0];
+                total_score[1] += curr_score[1];
+                        
+                curr_match.score = curr_score[0];
+                curr_match.text = text;
+                curr_match.text_index = target_text;
+                curr_match.time[0] = time_taken[0];
+                curr_match.time[1] = time_taken[1];
+
+                update_top_results(best_matches, curr_match);
+
+                write_output(file_names[z], text, pattern, target_text, target_pattern, time_taken, curr_score[0]);
+            } 
+        }
+        else 
+            {
+
+            for (int k = 0; k < num_len; k++) {
             
             snprintf(curr_file, sizeof(curr_file), "./test_cases/%s.txt", file_names[k]);
             clear_file(file_names[k]);
@@ -338,6 +552,7 @@ int main() {
                 // int target_line = rand() % total_seq;
                 int target_line = i;
                 char* pattern = extract_sequence(curr_file, target_line);
+            
                 if (!pattern) {
                     fprintf(stderr, "Failed to get random pattern. Skipping...\n");
                     continue;
@@ -440,6 +655,7 @@ int main() {
             average_score_per_len[0] = average_score[0]/num_len;
             average_score_per_len[1] = average_score[1]/num_len;
             // printf("| Text Length: %s\t|\t%.6fs (%lldns)\t|\t%.6fs (%lldns)\t|\t%d\t|\n", file_names[k], average_time_per_len[0]/1e9, average_time_per_len[0],  average_time_per_len[1]/1e9, average_time_per_len[1], best_score);
+            }
         }
     }
     

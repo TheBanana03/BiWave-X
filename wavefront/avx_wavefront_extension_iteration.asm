@@ -9,14 +9,24 @@ vecShuffle:
 
 section .text
 global avx_wavefront_extension_iteration
-global load_avx2_sequence
 default rel
 
 avx_wavefront_extension_iteration:
     xor rax, rax
+    vzeroall
 
-    vpxord zmm6, zmm6, zmm6
-    vpternlogd zmm5, zmm6, zmm6, 0xFF
+    mov eax, 0x10
+    vpbroadcastd zmm3, eax
+
+    mov dword [rsp - 64], 0xC0000000
+    vpbroadcastd zmm13, [rsp - 64]
+
+    mov dword [rsp - 64], 0x4
+    vpbroadcastd zmm14, [rsp - 64]
+
+    ; vpxord zmm6, zmm6, zmm6
+
+    vpternlogd zmm15, zmm6, zmm6, 0xFF
     vmovdqa64 zmm10, [rel vecShuffle]
 
     vmovdqa32 zmm0, [rdi]
@@ -24,11 +34,11 @@ avx_wavefront_extension_iteration:
     vmovdqa32 zmm2, [rsi]
     vpsubd zmm4, zmm0, zmm2
 
-    vpcmpgtd k1, zmm0, zmm5
+    vpcmpgtd k1, zmm0, zmm15
     kmovd k3, k1
-    vmovdqa32 [r9], zmm5
 
     vpxord zmm7, zmm7, zmm7
+
     vpgatherdd zmm7{k3}, [rcx+zmm4*1]
     kmovd k3, k1
 
@@ -43,23 +53,85 @@ avx_wavefront_extension_iteration:
     vpshufb zmm9, zmm9, zmm10
 
     vplzcntd zmm11{k1}{z}, zmm9
-    
+
     vpsrld zmm12, zmm11, 3
 
     vpaddd zmm12, zmm0, zmm12
+
     vpxord zmm0, zmm0, zmm0
+
     vmovdqa32 zmm0{k1}{z}, zmm12
-
-    ; sub rsp, 64
-    ; mov rax, rsp
-    ; add rsp, 64
-    ; lea rax, [rsp - 64]
-
-    mov dword [rsp - 64], 0x10
-    vpbroadcastd zmm3, [rsp - 64]
-    vpaddd zmm4, zmm2, zmm3
-    vmovdqa32 [rsi], zmm4
-
     vmovdqa32 [rdi], zmm0
+
+    vpaddd zmm5, zmm2, zmm3
+    vmovdqa32 [rsi], zmm5
+
+    kortestw k2, k2
+    jz      .skip_iter
+
+    ; vmovdqa32 [rdi], zmm0
+    ; kmovd [r9], k1
+
+    vpcmpd k1{k2}, zmm0, zmm6, 0x1
+    knotw k3, k1
+    kandw k4, k3, k2
+    kandw k3, k1, k2
+
+    vmovdqa32 zmm12{k4}, zmm0
+
+    mov rax, 0x4
+
+    lea r10, [rax+rcx]
+    lea r11, [rax+r8]
+
+    kmovd k5, k4
+    vpgatherdd zmm7{k5}, [r10+zmm4*1]
+
+    kmovd k5, k4
+    vpgatherdd zmm8{k5}, [r11+zmm1*1]
+
+    vpcmpeqd k5{k4}, zmm7, zmm8
+    kortestw k5, k5
+    jz .end_extend_loop
+
+    .extend_loop:
+        add rax, 0x4
+        lea r10, [rax+rcx]
+        lea r11, [rax+r8]
+    
+        ; vpaddd zmm12, zmm12, zmm14
+        vpxord zmm9, zmm7, zmm8
+        vpshufb zmm9, zmm9, zmm10
+    
+        vplzcntd zmm11{k4}{z}, zmm9
+    
+        vpsrld zmm12, zmm11, 3
+        vpaddd zmm12, zmm0, zmm12
+        vmovdqa32 zmm0{k4}, zmm12
+    
+        kmovd k5, k4
+        vpgatherdd zmm7{k5}, [r10+zmm4*1]
+    
+        kmovd k5, k4
+        vpgatherdd zmm8{k5}, [r11+zmm1*1]
+    
+        vpcmpeqd k5{k4}, zmm7, zmm8
+        kortestw k5, k5
+        jnz .extend_loop
+
+    .end_extend_loop:
+        vpxord zmm9, zmm7, zmm8
+        vpshufb zmm9, zmm9, zmm10
+    
+        vplzcntd zmm11{k4}{z}, zmm9
+    
+        vpsrld zmm12, zmm11, 3
+        vpaddd zmm12, zmm0, zmm12
+        vmovdqa32 zmm0{k4}, zmm12
+
+        vpblendmd zmm0{k3}, zmm0, zmm13
+        vmovdqa32 [rdi], zmm0
+
+    .skip_iter:
 
     ret

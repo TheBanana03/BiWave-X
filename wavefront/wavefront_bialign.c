@@ -56,6 +56,7 @@
 #if __AVX512CD__ && __AVX512VL__
 
     extern void avx512_wavefront_overlap_breakpoint_check(__m512i*, __mmask16*, int32_t, int32_t, int32_t*, int32_t*);
+    // extern void avx512_wavefront_overlap_breakpoint_check(__mmask16*, __m512i*, __m512i*, int32_t, __mmask16*);
     // extern void avx512_wavefront_overlap_breakpoint_getk1(__m512i*, __m512i*, int, int);
     // extern void avx512_wavefront_overlap_breakpoint_mask1(__m512i*, __m512i*, int, __mmask16*);
     // extern void avx512_wavefront_overlap_breakpoint_mask2(int, int, int, __mmask16*);
@@ -290,7 +291,8 @@ void wavefront_bialign_breakpoint_m2m(
   // Compute overlapping interval
   const int min_hi = MIN(hi_0,hi_1);
   const int max_lo = MAX(lo_0,lo_1);
-    // fprintf(stderr, "Lily: %d, %d\n", max_lo, min_hi);
+  //   fprintf(stderr, "Lily: %d, %d\n", max_lo, min_hi);
+    
   int k_0;
   for (k_0=max_lo;k_0<=min_hi;k_0++) {
       // if (k_0==max_lo && max_lo > 1000)
@@ -451,7 +453,6 @@ void wavefront_bialign_breakpoint_m2m_avx512(
     wavefront_t* const mwf_0,
     wavefront_t* const mwf_1,
     wf_bialign_breakpoint_t* const breakpoint) {
-  // AVX512 implementation of the bialign_breakpoint_indel2indel
   // Parameters
   wavefront_sequences_t* const sequences = &wf_aligner->sequences;
   const int text_length = sequences->text_length;
@@ -505,56 +506,105 @@ void wavefront_bialign_breakpoint_m2m_avx512(
     }
   }
   // Finish the remaining iterations in a vectorized manner
-  const __m512i tlens = _mm512_set1_epi32(text_length);
-  const __m512i rev   = _mm512_setr_epi32(15,14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0);
+  
   for (;k_0<=min_hi;k_0+=elems_per_register) {
-    const int k_1 = WAVEFRONT_K_INVERSE(k_0,pattern_length,text_length);
-    // Fetch offsets
-    __m512i doffsets_0 = _mm512_loadu_si512((__m512i*)&mwf_0->offsets[k_0]);
-    __m512i doffsets_1 = _mm512_loadu_si512((__m512i*)&mwf_1->offsets[k_1-elems_per_register+1]);
-    // doffsets_1 are in reverse order, so we need to reverse them
-    doffsets_1 = _mm512_permutexvar_epi32(rev, doffsets_1);
-    __m512i dh_0s = doffsets_0;
-    __m512i dh_1s = doffsets_1;
-    __mmask16 bp_found_mask =_mm512_cmpge_epi32_mask(_mm512_add_epi32(dh_0s, dh_1s), tlens);
+    alignas(64) __m512i k0_vector;
+    __m512i k1_vector;
+    __mmask16 score_mask;
+    alignas(64) __mmask16 mask_indices = 0xFFFF;
+      
+    k0_vector = _mm512_set_epi32(
+        k_0, k_0+1, k_0+2, k_0+3, k_0+4, k_0+5, k_0+6, k_0+7,
+        k_0+8, k_0+9, k_0+10, k_0+11, k_0+12, k_0+13, k_0+14, k_0+15);
+      k1_vector = k0_vector;
 
-    if (bp_found_mask) {
-      // A breakpoint has been found! Check in which exact diagonal it is
-      // This can be done directly from the mask and vector registers, for now,
-      // it is implemented like the scalar implementation. This only happens
-      // when a BP is found, so it should not be a bottleneck.
-      int initial_k0 = k_0;
-      for (;k_0<initial_k0+elems_per_register;k_0++) {
-        const int k_1 = WAVEFRONT_K_INVERSE(k_0,pattern_length,text_length);
-        // Fetch offsets
-        const wf_offset_t moffset_0 = mwf_0->offsets[k_0];
-        const wf_offset_t moffset_1 = mwf_1->offsets[k_1];
-        const int mh_0 = WAVEFRONT_H(k_0,moffset_0);
-        const int mh_1 = WAVEFRONT_H(k_1,moffset_1);
-        // Check breakpoint m2m
-        if (mh_0 + mh_1 >= text_length) {
-          if (breakpoint_forward) {
-            breakpoint->score_forward = score_0;
-            breakpoint->score_reverse = score_1;
-            breakpoint->k_forward = k_0;
-            breakpoint->k_reverse = k_1;
-            breakpoint->offset_forward = moffset_0;
-            breakpoint->offset_reverse = moffset_1;
-          } else {
-            breakpoint->score_forward = score_1;
-            breakpoint->score_reverse = score_0;
-            breakpoint->k_forward = k_1;
-            breakpoint->k_reverse = k_0;
-            breakpoint->offset_forward = moffset_1;
-            breakpoint->offset_reverse = moffset_0;
-          }
-          breakpoint->score = score_0 + score_1;
-          breakpoint->component = affine2p_matrix_M;
-          // wavefront_bialign_debug(breakpoint,-1); // DEBUG
-          // No need to keep searching
-          return;
-        }
+    // __m512i doffsets_0 = _mm512_loadu_si512((__m512i*)&mwf_0->offsets[k_0]);
+    // __m512i doffsets_1 = _mm512_loadu_si512((__m512i*)&mwf_1->offsets[k_1-elems_per_register+1]);
+
+    // doffsets_1 = _mm512_permutexvar_epi32(rev, doffsets_1);
+    // __m512i dh_0s = doffsets_0;
+    // __m512i dh_1s = doffsets_1;
+      
+    // print_m512i(dh_0s);
+    // print_m512i(dh_1s);
+
+    avx512_wavefront_overlap_breakpoint_check(&k0_vector, &mask_indices, text_length, pattern_length, mwf_0->offsets, mwf_1->offsets);
+
+    // Check score_0 + score_1 < breakpoint->score
+    // int score_sum = score_0 + score_1;
+    // if (score_sum < breakpoint->score) {
+    //   score_mask = _mm512_cmplt_epi32_mask(_mm512_set1_epi32(score_sum), _mm512_set1_epi32(breakpoint->score));
+    // } else {
+    //   score_mask = 0x0;
+    // }
+    
+    __m512i score_sum_vector = _mm512_add_epi32(_mm512_set1_epi32(score_0), _mm512_set1_epi32(score_1));
+    score_mask = _mm512_cmplt_epi32_mask(score_sum_vector, _mm512_set1_epi32(breakpoint->score));
+
+    
+    // Condition: if (mh_0 + mh_1 >= text_length && score_0 + score_1 < breakpoint->score) 
+    // if (bp_found_mask) {
+    // Scalar check of diagonals
+    //   int initial_k0 = k_0;
+    //   for (;k_0<initial_k0+elems_per_register;k_0++) {
+    //     const int k_1 = WAVEFRONT_K_INVERSE(k_0,pattern_length,text_length);
+    //     // Fetch offsets
+    //     const wf_offset_t moffset_0 = mwf_0->offsets[k_0];
+    //     const wf_offset_t moffset_1 = mwf_1->offsets[k_1];
+    //     const int mh_0 = WAVEFRONT_H(k_0,moffset_0);
+    //     const int mh_1 = WAVEFRONT_H(k_1,moffset_1);
+    //     // Check breakpoint m2m
+    //     if (mh_0 + mh_1 >= text_length) {
+    //       if (breakpoint_forward) {
+    //         breakpoint->score_forward = score_0;
+    //         breakpoint->score_reverse = score_1;
+    //         breakpoint->k_forward = k_0;
+    //         breakpoint->k_reverse = k_1;
+    //         breakpoint->offset_forward = moffset_0;
+    //         breakpoint->offset_reverse = moffset_1;
+    //       } else {
+    //         breakpoint->score_forward = score_1;
+    //         breakpoint->score_reverse = score_0;
+    //         breakpoint->k_forward = k_1;
+    //         breakpoint->k_reverse = k_0;
+    //         breakpoint->offset_forward = moffset_1;
+    //         breakpoint->offset_reverse = moffset_0;
+    //       }
+    //       breakpoint->score = score_0 + score_1;
+    //       breakpoint->component = affine2p_matrix_M;
+    //       // wavefront_bialign_debug(breakpoint,-1); // DEBUG
+    //       // No need to keep searching
+    //       return;
+    //     }
+    //   }
+    // }
+    __mmask16 final_mask = mask_indices & score_mask;
+    if (_mm512_mask2int(final_mask)) {
+      int line = _lzcnt_u32(_mm512_mask2int(final_mask)) - 16;
+      int final_k_0 = k_0 + line; //- max_lo;
+      int final_k_1 = text_length - pattern_length - final_k_0;
+
+        // fprintf(stderr, "--Lily: %d, %d, %d, %d, %d\n", min_hi, final_k_0, max_lo, line, k_0);
+        // print_mask(final_mask);
+
+      if (breakpoint_forward) {
+        breakpoint->score_forward = score_0;
+        breakpoint->score_reverse = score_1;
+        breakpoint->k_forward = final_k_0;
+        breakpoint->k_reverse = final_k_1;
+        breakpoint->offset_forward = mwf_0->offsets[final_k_0];
+        breakpoint->offset_reverse = mwf_1->offsets[final_k_1];
+      } else {
+        breakpoint->score_forward = score_1;
+        breakpoint->score_reverse = score_0;
+        breakpoint->k_forward = final_k_1;
+        breakpoint->k_reverse = final_k_0;
+        breakpoint->offset_forward = mwf_1->offsets[final_k_1];
+        breakpoint->offset_reverse = mwf_0->offsets[final_k_0];
       }
+      breakpoint->score = score_0 + score_1;
+      breakpoint->component = affine2p_matrix_M;
+      return;
     }
   }
 }

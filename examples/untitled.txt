@@ -1,0 +1,25 @@
+GNU gdb (Ubuntu 12.1-0ubuntu1~22.04.2) 12.1
+Copyright (C) 2022 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+Type "show copying" and "show warranty" for details.
+This GDB was configured as "x86_64-linux-gnu".
+Type "show configuration" for configuration details.
+For bug reporting instructions, please see:
+<https://www.gnu.org/software/gdb/bugs/>.
+Find the GDB manual and other documentation resources online at:
+    <http://www.gnu.org/software/gdb/documentation/>.
+
+For help, type "help".
+Type "apropos word" to search for commands related to "word"...
+Reading symbols from ./wfa_basic...
+[?2004h(gdb) 
+[?2004l[?2004h(gdb) c
+[?2004lThe program is not being run.
+[?2004h(gdb) Quit
+[?2004l[?2004h(gdb) quirtt[?2004lException ignored in: <gdb._GdbOutputFile object at 0x7fe16076b6a0>
+Traceback (most recent call last):
+  File "/usr/share/gdb/python/gdb/__init__.py", line 47, in flush
+    def flush(self):
+KeyboardInterrupt: 

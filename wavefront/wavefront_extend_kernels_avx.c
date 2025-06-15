@@ -67,6 +67,8 @@ FORCE_INLINE wf_offset_t wavefront_extend_matches_packed_kernel(
   const int equal_right_bits = __builtin_ctzl(cmp);
   const int equal_chars = DIV_FLOOR(equal_right_bits,8);
   offset += equal_chars;
+
+    
   // Return extended offset
   return offset;
 }
@@ -427,6 +429,17 @@ void print_m512i_bytes(__m512i vec) {
     printf("\n");
 }
 
+void print_m512i_to_file(__m512i vec, FILE* file) {
+    // __m512i contains 64 bytes (512 bits)
+    int32_t values[16];
+    _mm512_storeu_si512((__m512i*)values, vec); // Store the vector into the array
+
+    fprintf(file, ": ");
+    for (int i = 0; i < 64; i++) {
+        fprintf(file, "%d ", values[i]);  // Print as two-digit hex values
+    }
+    fprintf(file, "\n");
+}
 
 #if __AVX512CD__ && __AVX512VL__
 /*
@@ -438,7 +451,7 @@ FORCE_NO_INLINE void wavefront_extend_matches_packed_end2end_avx512(
     wavefront_t* const mwavefront,
     const int lo,
     const int hi) {
-static bool executed = false;
+// static bool executed = false;
     
   // Parameters
   wf_offset_t* const offsets = mwavefront->offsets;
@@ -486,7 +499,7 @@ static bool executed = false;
       // __m512i test_offsets_vector = offsets_vector;
       // __m512i test_ks = ks;
       __mmask16 mask;
-      __m512i debug;
+      __mmask16 debug;
       
     avx_wavefront_extension_iteration(&offsets_vector, &ks, &mask, pattern, text, &debug);
 
@@ -507,7 +520,7 @@ static bool executed = false;
     // offsets_vector      = _mm512_maskz_add_epi32(null_mask, offsets_vector, equal_chars);
     // ks                  = _mm512_add_epi32 (ks, sixteens);
 
-      // __mmask16 diff_mask = _mm512_cmpneq_epi32_mask(test_offsets_vector, offsets_vector);
+    //   __mmask16 diff_mask = _mm512_cmpneq_epi32_mask(test_offsets_vector, offsets_vector);
       // if (diff_mask && !executed) {
       //     executed = true;
       //     printf("1: ");
@@ -516,60 +529,72 @@ static bool executed = false;
       //     print_m512i(debug);
       // }
 
-    
       _mm512_storeu_si512((__m512*)&offsets[k],offsets_vector);
 
-    if(mask == 0) continue;
+    // if(mask == 0) continue;
 
-      // en = st - 16
-    // int st  = __builtin_ctz(mask);
-    // int en =__builtin_clz(mask)-16;
-    //   if (en < 0) printf("Lily\n");
+    //   // for (mask != 0) {
+          
+    //   // }
 
-    //   // This might be vectorizable? Unravel the loop?
-    // for (int i=st; i<16-en; i++){
-    //   if (((mask >> i) & 1) == 0) continue; // Checks if bit at position i is 1 or 0, run the rest if 1, do nothing if 0, can just use mask itself
-    //   const int curr_k = k + i; // curr_k can be a mask that movs from k to k+16 based on prev mask instead?
-    //   const wf_offset_t offset = offsets[curr_k]; // masked mov from offsets
-    //   if (offset >= 0) {
-    //     offsets[curr_k] = wavefront_extend_matches_packed_kernel(wf_aligner,curr_k,offset); // function call? Might not be vectorizable
-    //   } else {
-    //     offsets[curr_k] = WAVEFRONT_OFFSET_NULL; // masked mov to offsets, just set null if negative
-    //   }
+    //   // en = st - 16
+    // // int st  = __builtin_ctz(mask);
+    // // int en =__builtin_clz(mask)-16;
+    // //   if (en < 0) printf("\n");
+
+    // //   // This might be vectorizable? Unravel the loop?
+    // // for (int i=st; i<16-en; i++){
+    // //   if (((mask >> i) & 1) == 0) continue; // Checks if bit at position i is 1 or 0, run the rest if 1, do nothing if 0, can just use mask itself
+    // //   const int curr_k = k + i; // curr_k can be a mask that movs from k to k+16 based on prev mask instead?
+    // //   const wf_offset_t offset = offsets[curr_k]; // masked mov from offsets
+    // //   if (offset >= 0) {
+    // //     offsets[curr_k] = wavefront_extend_matches_packed_kernel(wf_aligner,curr_k,offset); // function call? Might not be vectorizable
+    // //   } else {
+    // //     offsets[curr_k] = WAVEFRONT_OFFSET_NULL; // masked mov to offsets, just set null if negative
+    // //   }
+    // // }
+
+    //   // load st + 1...16 into vec i
+    //   // perform masked add on k and i using "mask", output is curr_k
+    //   // masked gather offsets with curr_k using "mask", output is offset
+    //   // make mask based on if offset is negative
+    //   // perform masked mov using mask from prev line
+    //   // sequentially call func for the rest of offset
+    //   __m512i idx_vec = _mm512_set_epi32(15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0);
+    // __m512i k_vec   = _mm512_set1_epi32(k);
+    // __m512i curr_k  = _mm512_add_epi32(idx_vec, k_vec);
+    //   __m512i offsets_vec = _mm512_mask_i32gather_epi32(_mm512_setzero_si512(), mask, curr_k, offsets, 4);
+    //   __mmask16 neg_mask = _mm512_cmp_epi32_mask(offsets_vec, _mm512_setzero_si512(), _MM_CMPINT_LT);
+    //     __mmask16 pos_mask = mask & ~neg_mask;
+    //     __m512i null_val = _mm512_set1_epi32(WAVEFRONT_OFFSET_NULL);
+    //     _mm512_mask_i32scatter_epi32(offsets, mask & neg_mask, curr_k, null_val, 4);
+    //   int compressed_curr_k[16];
+    //     int compressed_offset[16];
+        
+    //     // Store only the active `curr_k_arr` and `offset_arr` lanes
+    //     _mm512_mask_compressstoreu_epi32(compressed_curr_k, pos_mask, curr_k);
+    //     _mm512_mask_compressstoreu_epi32(compressed_offset, pos_mask, offsets_vec);
+        
+    //     // Count active lanes
+    //     int num_active = _mm_popcnt_u32(pos_mask);
+        
+    //     // Now loop only over the active elements
+    //     for (int i = 0; i < num_active; ++i) {
+    //       const int k_i = compressed_curr_k[i];
+    //       const int offset_i = compressed_offset[i];
+    //       offsets[k_i] = wavefront_extend_matches_packed_kernel(wf_aligner, k_i, offset_i);
+    //     }
+    //   debug = mask;
+
+    //   offsets_vector = _mm512_loadu_si512 ((__m512i*)&offsets[k]);
+    //   FILE *file = fopen("dump.txt", "a");  // "w" = write mode (overwrite)
+    
+    // if (file == NULL) {
+    //     perror("fopen");
     // }
-
-      // load st + 1...16 into vec i
-      // perform masked add on k and i using "mask", output is curr_k
-      // masked gather offsets with curr_k using "mask", output is offset
-      // make mask based on if offset is negative
-      // perform masked mov using mask from prev line
-      // sequentially call func for the rest of offset
-      __m512i idx_vec = _mm512_set_epi32(15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0);
-    __m512i k_vec   = _mm512_set1_epi32(k);
-    __m512i curr_k  = _mm512_add_epi32(idx_vec, k_vec);
-      __m512i offsets_vec = _mm512_mask_i32gather_epi32(_mm512_setzero_si512(), mask, curr_k, offsets, 4);
-      __mmask16 neg_mask = _mm512_cmp_epi32_mask(offsets_vec, _mm512_setzero_si512(), _MM_CMPINT_LT);
-        __mmask16 pos_mask = mask & ~neg_mask;
-        __m512i null_val = _mm512_set1_epi32(WAVEFRONT_OFFSET_NULL);
-        _mm512_mask_i32scatter_epi32(offsets, mask & neg_mask, curr_k, null_val, 4);
-      int compressed_curr_k[16];
-        int compressed_offset[16];
-        
-        // Store only the active `curr_k_arr` and `offset_arr` lanes
-        _mm512_mask_compressstoreu_epi32(compressed_curr_k, pos_mask, curr_k);
-        _mm512_mask_compressstoreu_epi32(compressed_offset, pos_mask, offsets_vec);
-        
-        // Count active lanes
-        int num_active = _mm_popcnt_u32(pos_mask);
-        
-        // Now loop only over the active elements
-        for (int i = 0; i < num_active; ++i) {
-          const int k_i = compressed_curr_k[i];
-          const int offset_i = compressed_offset[i];
-          offsets[k_i] = (offset_i >= 0)
-            ? wavefront_extend_matches_packed_kernel(wf_aligner, k_i, offset_i)
-            : WAVEFRONT_OFFSET_NULL;
-        }
+    //   print_m512i_to_file(offsets_vector, file);
+    // fclose(file);
+     // print_mask(debug);
   }
 }
 

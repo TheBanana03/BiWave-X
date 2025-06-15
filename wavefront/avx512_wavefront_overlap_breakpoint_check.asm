@@ -3,8 +3,6 @@ global avx512_wavefront_overlap_breakpoint_check
 
 
 avx512_wavefront_overlap_breakpoint_check:
-    ;             rdi         rsi         rdx    rcx      r8               r9         rsp+8
-    ; params: &k0_vector, &mask_indices,  tlen, plen, mwf_0->offsets, mwf_1->offsets, &mask1
     vpxord zmm0, zmm0, zmm0
     vmovdqa32 zmm0, [rdi] ; k0_vector
 

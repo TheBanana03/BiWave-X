@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
   wavefront_aligner_t* const wf_aligner = wavefront_aligner_new(&attributes);
     
   // Align
-  wavefront_align(wf_aligner,pattern,strlen(pattern),text,strlen(text));
+  // wavefront_align(wf_aligner,pattern,strlen(pattern),text,strlen(text));
 
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);

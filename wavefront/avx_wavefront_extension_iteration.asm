@@ -47,8 +47,6 @@ avx_wavefront_extension_iteration:
 
     vpcmpeqd k2{k1}, zmm7, zmm8
 
-    kmovd [rdx], k2
-
     vpxord zmm9, zmm7, zmm8
     vpshufb zmm9, zmm9, zmm10
 

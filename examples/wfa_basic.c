@@ -28,7 +28,7 @@
  * AUTHOR(S): Santiago Marco-Sola <santiagomsola@gmail.com>
  * DESCRIPTION: WFA Sample-Code
  */
-
+#include <time.h>
 #include "wavefront/wavefront_align.h"
 #include "wavefront/wavefront_plot.h"
 
@@ -63,8 +63,9 @@ int main(int argc, char* argv[]) {
     if(read > 0 && line[read-1] == '\n') {
       line[read-1] = '\0';
     }
-    
-    pattern = strdup(line);
+    if(line[0] != '>') {
+      pattern = strdup(line);
+    }
   }
 
   fclose(file);
@@ -89,8 +90,9 @@ int main(int argc, char* argv[]) {
     if(read2 > 0 && line[read2-1] == '\n') {
       line[read2-1] = '\0';
     }
-    
-    text = strdup(line);
+    if(line[0] != '>') {
+      text = strdup(line);
+    }
   }
 
   fclose(file);

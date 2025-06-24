@@ -21,11 +21,6 @@ avx_wavefront_extension_iteration:
     mov dword [rsp - 64], 0xC0000000
     vpbroadcastd zmm13, [rsp - 64]
 
-    mov dword [rsp - 64], 0x4
-    vpbroadcastd zmm14, [rsp - 64]
-
-    ; vpxord zmm6, zmm6, zmm6
-
     vpternlogd zmm15, zmm6, zmm6, 0xFF
     vmovdqa64 zmm10, [rel vecShuffle]
 
@@ -54,12 +49,9 @@ avx_wavefront_extension_iteration:
 
     vpsrld zmm12, zmm11, 3
 
-    vpaddd zmm12, zmm0, zmm12
+    vpaddd zmm0, zmm0, zmm12
 
-    vpxord zmm0, zmm0, zmm0
-
-    vmovdqa32 zmm0{k1}{z}, zmm12
-    vmovdqa32 [rdi], zmm0
+    vmovdqa32 [rdi]{k1}, zmm0
 
     vpaddd zmm5, zmm2, zmm3
     vmovdqa32 [rsi], zmm5
@@ -75,12 +67,15 @@ avx_wavefront_extension_iteration:
     kandw k4, k3, k2
     kandw k3, k1, k2
 
-    vmovdqa32 zmm12{k4}, zmm0
+    vmovdqa32 zmm0{k4}, zmm0
 
     mov rax, 0x4
 
     lea r10, [rax+rcx]
     lea r11, [rax+r8]
+
+    ;vmovdqa32 zmm1, zmm0
+    ;vpsubd zmm4, zmm0, zmm5
 
     kmovd k5, k4
     vpgatherdd zmm7{k5}, [r10+zmm4*1]
@@ -97,7 +92,6 @@ avx_wavefront_extension_iteration:
         lea r10, [rax+rcx]
         lea r11, [rax+r8]
     
-        ; vpaddd zmm12, zmm12, zmm14
         vpxord zmm9, zmm7, zmm8
         vpshufb zmm9, zmm9, zmm10
     
@@ -106,7 +100,9 @@ avx_wavefront_extension_iteration:
         vpsrld zmm12, zmm11, 3
         vpaddd zmm12, zmm0, zmm12
         vmovdqa32 zmm0{k4}, zmm12
-    
+
+        kandd k4, k5, k4
+
         kmovd k5, k4
         vpgatherdd zmm7{k5}, [r10+zmm4*1]
     
